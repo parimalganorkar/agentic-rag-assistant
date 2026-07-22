@@ -266,20 +266,64 @@ docs/         roadmap and phase-by-phase build notes
 
 ---
 
-## Design decisions worth calling out
+## Problems hit while building — and how they were fixed
 
-- **Code examples are never dropped.** Many pages keep code in Mintlify snippet
-  imports rendered as `<Component />`. The cleaner inlines those *before*
-  stripping JSX — otherwise exactly the code a code-focused retriever needs would
-  vanish. Restoring it also moved hybrid retrieval **+0.12 MRR**, because BM25
-  finally had identifiers to match on.
-- **`doc_type` comes from the docs' own navigation**, not guessed from paths. A
-  content-density classifier was tried and abandoned (it collapsed 83/114 docs
-  into one class).
-- **Guards repair before they refuse.** An all-or-nothing verifier was discarding
-  95%-correct answers over one unsupported sentence.
-- **The eval corpus includes deliberate noise** — off-topic and poisoned chunks —
-  so "it ignores junk" is measured, not assumed.
+### 1. Code examples were silently disappearing from the corpus
+
+**The problem.** The LangChain docs don't always write code inline. Many pages
+keep it in separate snippet files and pull it in with an import tag that renders
+as `<Component />`. The cleaner was stripping those tags as if they were
+decoration — so the code they stood for never made it into the index. Ask "show
+me the code for building an agent" and you'd get the surrounding prose with the
+example missing.
+
+**The fix.** The cleaner now resolves each import, fetches the snippet's real
+content, and pastes it in *before* the tag-stripping step runs.
+
+**The result.** ~259 code-bearing chunks recovered (2,052 → 2,313). Keyword
+search improved sharply too — hybrid retrieval went from **0.638 → 0.760 MRR**,
+because BM25 finally had real function and class names to match against.
+
+### 2. Document type labels were nearly useless
+
+**The problem.** Every doc gets tagged as concept / how-to / reference /
+tutorial, which powers the "what do you cover?" feature. The first approach
+guessed the label from the file path and writing style — and tagged **83 of 114
+documents as "how-to"**. A label that says the same thing about everything tells
+you nothing.
+
+**The fix.** Stopped guessing. The documentation site already groups every page
+in its own navigation file (`docs.json`), so the labels are now read from there.
+
+**The result.** Zero unknown labels, and a coverage breakdown that reflects
+reality (22 concept · 63 how-to · 13 error · 10 get-started · …).
+
+### 3. The safety layer was rejecting good answers
+
+**The problem.** A fact-checker verified each answer against its sources, but it
+was all-or-nothing: if a *single* sentence wasn't supported, the whole answer was
+thrown away and replaced with "I don't have enough information." Answers that
+were 95% correct and properly cited were being binned over one stray line.
+**44% of perfectly legitimate questions were being refused.**
+
+**The fix.** Repair instead of discard — remove only the unsupported sentences
+and keep the rest. Refuse outright only when too much has to be cut, or when the
+content is genuinely unsafe.
+
+**The result.** False refusals dropped from **44% → 9.9%**, with no loss in
+attack resistance.
+
+### 4. "It ignores irrelevant docs" — proven, not claimed
+
+**The problem.** It's easy to assert a RAG system won't hallucinate from junk
+context. It's much harder to show it.
+
+**The fix.** The evaluation corpus deliberately includes off-topic chunks and
+poisoned documents planted to mislead the model, plus three separate suites of
+prompt-injection attacks written *after* the defences existed.
+
+**The result.** Attack success fell from **33% → 4%**, and the 2 attacks that
+still get through are documented openly rather than hidden.
 
 ---
 
