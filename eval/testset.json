@@ -1,0 +1,878 @@
+{
+  "description": "Eval testset grown to 100: 15 hand-written seed + qwen-generated (chunk-derived, auto-labeled) + adversarial. See scripts/14_gen_questions.py.",
+  "questions": [
+    {
+      "id": "q1",
+      "category": "how-to",
+      "question": "How do I use a memory checkpoint in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/persistence.mdx",
+        "src/oss/langgraph/checkpointers.mdx",
+        "src/oss/langgraph/stores.mdx"
+      ],
+      "expected_keywords": [
+        "checkpointer",
+        "InMemorySaver",
+        "thread_id",
+        "compile"
+      ]
+    },
+    {
+      "id": "q2",
+      "category": "how-to",
+      "question": "How do I create an agent with tools in LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/agents.mdx",
+        "src/oss/langchain/tools.mdx"
+      ],
+      "expected_keywords": [
+        "create_agent",
+        "tools",
+        "model"
+      ]
+    },
+    {
+      "id": "q3",
+      "category": "keyword",
+      "question": "How do I use InMemorySaver as a checkpointer?",
+      "expected_source_files": [
+        "src/oss/langgraph/checkpointers.mdx",
+        "src/oss/langgraph/persistence.mdx"
+      ],
+      "expected_keywords": [
+        "InMemorySaver",
+        "checkpointer",
+        "compile"
+      ]
+    },
+    {
+      "id": "q4",
+      "category": "how-to",
+      "question": "How do I stream tokens from an agent as it runs?",
+      "expected_source_files": [
+        "src/oss/langchain/streaming.mdx",
+        "src/oss/langgraph/streaming.mdx"
+      ],
+      "expected_keywords": [
+        "stream",
+        "tokens",
+        "invoke"
+      ]
+    },
+    {
+      "id": "q5",
+      "category": "keyword",
+      "question": "How do I bind tools to a chat model?",
+      "expected_source_files": [
+        "src/oss/langchain/models.mdx",
+        "src/oss/langchain/tools.mdx"
+      ],
+      "expected_keywords": [
+        "bind_tools",
+        "tool_calls",
+        "model"
+      ]
+    },
+    {
+      "id": "q6",
+      "category": "concept",
+      "question": "What is a subagent in LangChain multi-agent systems?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/subagents.mdx"
+      ],
+      "expected_keywords": [
+        "subagent",
+        "supervisor",
+        "handoff"
+      ]
+    },
+    {
+      "id": "q7",
+      "category": "how-to",
+      "question": "How do I return structured output from an agent?",
+      "expected_source_files": [
+        "src/oss/langchain/structured-output.mdx",
+        "src/oss/langchain/agents.mdx"
+      ],
+      "expected_keywords": [
+        "response_format",
+        "structured",
+        "schema"
+      ]
+    },
+    {
+      "id": "q8",
+      "category": "concept",
+      "question": "What is short-term memory in LangGraph and how is it scoped?",
+      "expected_source_files": [
+        "src/oss/langchain/short-term-memory.mdx",
+        "src/oss/concepts/memory.mdx"
+      ],
+      "expected_keywords": [
+        "short-term",
+        "memory",
+        "thread"
+      ]
+    },
+    {
+      "id": "q9",
+      "category": "how-to",
+      "question": "How do I add long-term memory to an agent?",
+      "expected_source_files": [
+        "src/oss/langchain/long-term-memory.mdx",
+        "src/oss/langgraph/stores.mdx"
+      ],
+      "expected_keywords": [
+        "long-term",
+        "store",
+        "memory"
+      ]
+    },
+    {
+      "id": "q10",
+      "category": "how-to",
+      "question": "How do I add human-in-the-loop review to a LangChain agent?",
+      "expected_source_files": [
+        "src/oss/langchain/human-in-the-loop.mdx"
+      ],
+      "expected_keywords": [
+        "interrupt",
+        "approve",
+        "human"
+      ]
+    },
+    {
+      "id": "q11",
+      "category": "concept",
+      "question": "What is the difference between a checkpointer and a store in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/persistence.mdx",
+        "src/oss/langgraph/stores.mdx",
+        "src/oss/langgraph/checkpointers.mdx"
+      ],
+      "expected_keywords": [
+        "checkpointer",
+        "store",
+        "thread",
+        "across"
+      ]
+    },
+    {
+      "id": "q12",
+      "category": "how-to",
+      "question": "How do I write custom middleware for an agent?",
+      "expected_source_files": [
+        "src/oss/langchain/middleware/custom.mdx",
+        "src/oss/langchain/middleware/overview.mdx"
+      ],
+      "expected_keywords": [
+        "middleware",
+        "wrap_model_call",
+        "before_model"
+      ]
+    },
+    {
+      "id": "q13",
+      "category": "reference",
+      "question": "What can I access through the ToolRuntime object inside a tool?",
+      "expected_source_files": [
+        "src/oss/langchain/runtime.mdx",
+        "src/oss/langchain/tools.mdx"
+      ],
+      "expected_keywords": [
+        "runtime",
+        "context",
+        "state",
+        "store"
+      ]
+    },
+    {
+      "id": "q14",
+      "category": "keyword",
+      "question": "How does create_agent work with middleware?",
+      "expected_source_files": [
+        "src/oss/langchain/agents.mdx",
+        "src/oss/langchain/middleware/overview.mdx",
+        "src/oss/langchain/middleware/custom.mdx"
+      ],
+      "expected_keywords": [
+        "create_agent",
+        "middleware",
+        "harness"
+      ]
+    },
+    {
+      "id": "q15",
+      "category": "adversarial",
+      "question": "How do I set up a Kubernetes cluster with Helm charts?",
+      "expected_source_files": [],
+      "expected_keywords": [
+        "I don't have enough information"
+      ]
+    },
+    {
+      "id": "q16",
+      "category": "concept",
+      "question": "How should `interrupt` calls be ordered within a LangGraph node to avoid unexpected behavior?",
+      "expected_source_files": [
+        "src/oss/langgraph/interrupts.mdx"
+      ]
+    },
+    {
+      "id": "q17",
+      "category": "concept",
+      "question": "What types of compatibility issues should I be aware of when making changes to my LangGraph code?",
+      "expected_source_files": [
+        "src/oss/langgraph/backward-compatibility.mdx"
+      ]
+    },
+    {
+      "id": "q18",
+      "category": "how-to",
+      "question": "How can I create a human-in-the-loop workflow using LangGraph's functional API?",
+      "expected_source_files": [
+        "src/oss/langgraph/use-functional-api.mdx"
+      ]
+    },
+    {
+      "id": "q19",
+      "category": "how-to",
+      "question": "How can I filter tools based on user preferences or feature flags using LangGraph in a custom agent?",
+      "expected_source_files": [
+        "src/oss/langchain/context-engineering.mdx"
+      ]
+    },
+    {
+      "id": "q20",
+      "category": "concept",
+      "question": "How does LangGraph handle dynamic pipelines with conditional branching?",
+      "expected_source_files": [
+        "src/oss/langgraph/frontend/graph-execution.mdx"
+      ]
+    },
+    {
+      "id": "q21",
+      "category": "how-to",
+      "question": "How can you integrate LangGraph's StateGraph and Functional API within a single application?",
+      "expected_source_files": [
+        "src/oss/langgraph/choosing-apis.mdx"
+      ]
+    },
+    {
+      "id": "q22",
+      "category": "concept",
+      "question": "How do I disable data tracing to LangSmith in my application?",
+      "expected_source_files": [
+        "src/oss/langgraph/studio.mdx"
+      ]
+    },
+    {
+      "id": "q23",
+      "category": "how-to",
+      "question": "How can I configure an agent in LangChain to use a specific thread ID?",
+      "expected_source_files": [
+        "src/oss/langchain/quickstart.mdx"
+      ]
+    },
+    {
+      "id": "q24",
+      "category": "how-to",
+      "question": "How can I create an on-demand skill loading tool in LangChain to provide detailed information about specific skills?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/skills-sql-assistant.mdx"
+      ]
+    },
+    {
+      "id": "q25",
+      "category": "how-to",
+      "question": "How can I use the `create_agent` function with different models and tools?",
+      "expected_source_files": [
+        "src/oss/langchain/quickstart.mdx"
+      ]
+    },
+    {
+      "id": "q26",
+      "category": "concept",
+      "question": "How do changes to task calls or interrupt points affect non-determinism in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/backward-compatibility.mdx"
+      ]
+    },
+    {
+      "id": "q27",
+      "category": "how-to",
+      "question": "What is the role of the event router in LangChain, and how does it interact with stream transformers?",
+      "expected_source_files": [
+        "src/oss/langgraph/event-streaming.mdx"
+      ]
+    },
+    {
+      "id": "q28",
+      "category": "how-to",
+      "question": "How do I define a subgraph and add nodes with state updates in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/use-subgraphs.mdx"
+      ]
+    },
+    {
+      "id": "q29",
+      "category": "concept",
+      "question": "In Agentic RAG, how does the agent decide when to retrieve external information?",
+      "expected_source_files": [
+        "src/oss/langchain/retrieval.mdx"
+      ]
+    },
+    {
+      "id": "q30",
+      "category": "how-to",
+      "question": "How can I implement message summarization in an agent using LangChain to manage conversation history?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/handoffs-customer-support.mdx"
+      ]
+    },
+    {
+      "id": "q31",
+      "category": "how-to",
+      "question": "How can you integrate human review into a LangGraph workflow using interrupts?",
+      "expected_source_files": [
+        "src/oss/langgraph/functional-api.mdx"
+      ]
+    },
+    {
+      "id": "q32",
+      "category": "concept",
+      "question": "How does LangGraph handle resumption after an interrupt is triggered within a node?",
+      "expected_source_files": [
+        "src/oss/langgraph/interrupts.mdx"
+      ]
+    },
+    {
+      "id": "q33",
+      "category": "how-to",
+      "question": "How can I resume a tool execution that was paused for approval in LangChain or LangGraph?",
+      "expected_source_files": [
+        "src/oss/langchain/sql-agent.mdx"
+      ]
+    },
+    {
+      "id": "q34",
+      "category": "reference",
+      "question": "How can I deploy a LangGraph instance for development and production use?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/integrations/copilotkit.mdx"
+      ]
+    },
+    {
+      "id": "q35",
+      "category": "how-to",
+      "question": "How do I implement graceful shutdown in LangGraph using RunControl?",
+      "expected_source_files": [
+        "src/oss/langgraph/fault-tolerance.mdx"
+      ]
+    },
+    {
+      "id": "q36",
+      "category": "how-to",
+      "question": "What are the steps involved in building a RAG agent with LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/rag.mdx"
+      ]
+    },
+    {
+      "id": "q37",
+      "category": "how-to",
+      "question": "How can I implement an after agent guardrail using LangChain's AgentMiddleware to ensure the final response is safe?",
+      "expected_source_files": [
+        "src/oss/langchain/guardrails.mdx"
+      ]
+    },
+    {
+      "id": "q38",
+      "category": "how-to",
+      "question": "How can I limit the number of calls to tools in an agent using LangChain's ToolCallLimitMiddleware?",
+      "expected_source_files": [
+        "src/oss/langchain/middleware/built-in.mdx"
+      ]
+    },
+    {
+      "id": "q39",
+      "category": "concept",
+      "question": "What type of task automation does LangChain provide for the logistics industry?",
+      "expected_source_files": [
+        "src/oss/langgraph/case-studies.mdx"
+      ]
+    },
+    {
+      "id": "q40",
+      "category": "how-to",
+      "question": "How do I create a 'generate_query_or_respond' node in LangGraph to decide between retrieval and direct response based on the current chat messages?",
+      "expected_source_files": [
+        "src/oss/langgraph/agentic-rag.mdx"
+      ]
+    },
+    {
+      "id": "q41",
+      "category": "concept",
+      "question": "How long is the average track length for the 'Sci Fi & Fantasy' genre in milliseconds according to the given data?",
+      "expected_source_files": [
+        "src/oss/langgraph/sql-agent.mdx"
+      ]
+    },
+    {
+      "id": "q42",
+      "category": "concept",
+      "question": "How can I use LangGraph to retrieve the state of a graph before it entered a specific node using its ID?",
+      "expected_source_files": [
+        "src/oss/langgraph/use-time-travel.mdx"
+      ]
+    },
+    {
+      "id": "q43",
+      "category": "concept",
+      "question": "How can I use the `Command` object to update the agent's state in LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/context-engineering.mdx"
+      ]
+    },
+    {
+      "id": "q44",
+      "category": "how-to",
+      "question": "How do I set up and use the `useStream` function in a Svelte component for human-in-the-loop interactions with an agent?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/human-in-the-loop.mdx"
+      ]
+    },
+    {
+      "id": "q45",
+      "category": "how-to",
+      "question": "How do you create a fork in LangGraph to change the state at a specific checkpoint?",
+      "expected_source_files": [
+        "src/oss/langgraph/use-time-travel.mdx"
+      ]
+    },
+    {
+      "id": "q46",
+      "category": "reference",
+      "question": "How do I serialize standard content blocks in LangChain messages?",
+      "expected_source_files": [
+        "src/oss/langchain/messages.mdx"
+      ]
+    },
+    {
+      "id": "q47",
+      "category": "how-to",
+      "question": "How can I integrate an AI chat interface using assistant-ui with a LangChain agent?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/integrations/assistant-ui.mdx"
+      ]
+    },
+    {
+      "id": "q48",
+      "category": "concept",
+      "question": "What is the difference between using the state machine pattern and the subagents pattern in LangChain for building customer support agents?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/handoffs-customer-support.mdx"
+      ]
+    },
+    {
+      "id": "q49",
+      "category": "concept",
+      "question": "Which pattern would you recommend for a scenario that requires handling multiple domains with a lower number of calls and tokens?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/index.mdx"
+      ]
+    },
+    {
+      "id": "q50",
+      "category": "concept",
+      "question": "How can I handle interrupts in the supervisor_agent.stream_events method and what actions should I take when an interruption occurs?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/subagents-personal-assistant.mdx"
+      ]
+    },
+    {
+      "id": "q51",
+      "category": "how-to",
+      "question": "How can I create a command to transfer a conversation from one agent to another in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/handoffs.mdx"
+      ]
+    },
+    {
+      "id": "q52",
+      "category": "how-to",
+      "question": "How can I apply a dynamic timeout to specific pushes using LangGraph's Send method?",
+      "expected_source_files": [
+        "src/oss/langgraph/fault-tolerance.mdx"
+      ]
+    },
+    {
+      "id": "q53",
+      "category": "how-to",
+      "question": "How do I log traces to a specific project instead of the default one in LangSmith?",
+      "expected_source_files": [
+        "src/oss/langchain/observability.mdx"
+      ]
+    },
+    {
+      "id": "q54",
+      "category": "concept",
+      "question": "How can I optimize performance when using `useStream` for very long responses in a LangChain application?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/markdown-messages.mdx"
+      ]
+    },
+    {
+      "id": "q55",
+      "category": "concept",
+      "question": "In what scenarios would you prefer using the Graph API over a functional API, specifically for managing complex workflows with decision branches and shared state?",
+      "expected_source_files": [
+        "src/oss/langgraph/choosing-apis.mdx"
+      ]
+    },
+    {
+      "id": "q56",
+      "category": "concept",
+      "question": "In which scenarios would a developer choose Hybrid RAG over other architectures?",
+      "expected_source_files": [
+        "src/oss/langchain/retrieval.mdx"
+      ]
+    },
+    {
+      "id": "q57",
+      "category": "concept",
+      "question": "How can you pass private state between nodes in a LangGraph while ensuring it is not part of the overall schema?",
+      "expected_source_files": [
+        "src/oss/langgraph/use-graph-api.mdx"
+      ]
+    },
+    {
+      "id": "q58",
+      "category": "how-to",
+      "question": "How do I define a conditional edge function in LangChain to determine whether the agent should continue or end based on an LLM's tool call?",
+      "expected_source_files": [
+        "src/oss/langgraph/quickstart.mdx"
+      ]
+    },
+    {
+      "id": "q59",
+      "category": "concept",
+      "question": "How do you define communication between a parent graph and a subgraph when they share state keys?",
+      "expected_source_files": [
+        "src/oss/langgraph/use-subgraphs.mdx"
+      ]
+    },
+    {
+      "id": "q60",
+      "category": "how-to",
+      "question": "How can I extract and join reasoning blocks from an AIMessage in LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/reasoning-tokens.mdx"
+      ]
+    },
+    {
+      "id": "q61",
+      "category": "how-to",
+      "question": "How do I register custom components in CopilotKit's useChatKit()?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/integrations/copilotkit.mdx"
+      ]
+    },
+    {
+      "id": "q62",
+      "category": "how-to",
+      "question": "How can I set up recording and replay of HTTP interactions for tests using LangChain in a CI environment?",
+      "expected_source_files": [
+        "src/oss/langchain/test/integration-testing.mdx"
+      ]
+    },
+    {
+      "id": "q63",
+      "category": "concept",
+      "question": "How do tool calls get rendered during streaming text in LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/tool-calling.mdx"
+      ]
+    },
+    {
+      "id": "q64",
+      "category": "concept",
+      "question": "How can time travel in LangChain be utilized for debugging an agent’s behavior?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/time-travel.mdx"
+      ]
+    },
+    {
+      "id": "q65",
+      "category": "how-to",
+      "question": "How do I test my LangGraph application using Studio if it's running on a custom host and port?",
+      "expected_source_files": [
+        "src/oss/langgraph/local-server.mdx"
+      ]
+    },
+    {
+      "id": "q66",
+      "category": "how-to",
+      "question": "How can I use LangGraph to add a sequence of steps using the `add_sequence` method?",
+      "expected_source_files": [
+        "src/oss/langgraph/use-graph-api.mdx"
+      ]
+    },
+    {
+      "id": "q67",
+      "category": "how-to",
+      "question": "How do I prepare a simple email agent using LangChain?",
+      "expected_source_files": [
+        "src/oss/langgraph/studio.mdx"
+      ]
+    },
+    {
+      "id": "q68",
+      "category": "how-to",
+      "question": "How should I handle streaming content in the NodeContent component to ensure incomplete markdown is rendered correctly?",
+      "expected_source_files": [
+        "src/oss/langgraph/frontend/graph-execution.mdx"
+      ]
+    },
+    {
+      "id": "q69",
+      "category": "how-to",
+      "question": "How do I defer a tool from being used by the model until it is searched for using provider tool search in LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/middleware/built-in.mdx"
+      ]
+    },
+    {
+      "id": "q70",
+      "category": "how-to",
+      "question": "How can I address rate limiting issues in LangChain models?",
+      "expected_source_files": [
+        "src/oss/langchain/errors/MODEL_RATE_LIMIT.mdx"
+      ]
+    },
+    {
+      "id": "q71",
+      "category": "how-to",
+      "question": "How can I transform raw checkpoint data into a format suitable for displaying in a timeline using LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/time-travel.mdx"
+      ]
+    },
+    {
+      "id": "q72",
+      "category": "how-to",
+      "question": "How do I set up a retry policy for a node in LangGraph to handle transient failures?",
+      "expected_source_files": [
+        "src/oss/langgraph/thinking-in-langgraph.mdx"
+      ]
+    },
+    {
+      "id": "q73",
+      "category": "how-to",
+      "question": "How can I use LangChain and LangGraph to build a multi-agent customer support system?",
+      "expected_source_files": [
+        "src/oss/langgraph/case-studies.mdx"
+      ]
+    },
+    {
+      "id": "q74",
+      "category": "how-to",
+      "question": "How do you add conditional edges starting from the virtual START node in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/graph-api.mdx"
+      ]
+    },
+    {
+      "id": "q75",
+      "category": "how-to",
+      "question": "How do I set up and use the `injectStream` function in an Angular component with LangChain?",
+      "expected_source_files": [
+        "src/oss/langgraph/frontend/custom-stream-channels.mdx"
+      ]
+    },
+    {
+      "id": "q76",
+      "category": "how-to",
+      "question": "How do I configure and use LangGraph to stream events in a production environment with specific context?",
+      "expected_source_files": [
+        "src/oss/langgraph/add-memory.mdx"
+      ]
+    },
+    {
+      "id": "q77",
+      "category": "how-to",
+      "question": "How do you create an agent with skill support using LangChain and LangGraph?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/skills-sql-assistant.mdx"
+      ]
+    },
+    {
+      "id": "q78",
+      "category": "how-to",
+      "question": "How can I use different agent frameworks like Fireworks or Baseten with LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/overview.mdx"
+      ]
+    },
+    {
+      "id": "q79",
+      "category": "concept",
+      "question": "What is the role of a stream handler in LangGraph's event streaming process?",
+      "expected_source_files": [
+        "src/oss/langgraph/event-streaming.mdx"
+      ]
+    },
+    {
+      "id": "q80",
+      "category": "how-to",
+      "question": "How do I set up the `useStream` function in a Vue component with LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/markdown-messages.mdx"
+      ]
+    },
+    {
+      "id": "q81",
+      "category": "how-to",
+      "question": "How do I run trajectory evaluation for an agent using LangChain and LangSmith?",
+      "expected_source_files": [
+        "src/oss/langchain/test/evals.mdx"
+      ]
+    },
+    {
+      "id": "q82",
+      "category": "concept",
+      "question": "How is the hierarchy of UI components represented in the JSON spec format used for Generative UI?",
+      "expected_source_files": [
+        "src/oss/langchain/frontend/generative-ui.mdx"
+      ]
+    },
+    {
+      "id": "q83",
+      "category": "how-to",
+      "question": "How can I trace the MCP tool calls within an agent's reasoning process using LangSmith?",
+      "expected_source_files": [
+        "src/oss/langchain/mcp.mdx"
+      ]
+    },
+    {
+      "id": "q84",
+      "category": "how-to",
+      "question": "How do I create and attach a custom stream channel transformer to an agent in LangChain?",
+      "expected_source_files": [
+        "src/oss/langgraph/frontend/custom-stream-channels.mdx"
+      ]
+    },
+    {
+      "id": "q85",
+      "category": "concept",
+      "question": "What does the `CheckpointTuple` object contain when retrieved using `checkpointer.get_tuple(config)`?",
+      "expected_source_files": [
+        "src/oss/langgraph/add-memory.mdx"
+      ]
+    },
+    {
+      "id": "q86",
+      "category": "how-to",
+      "question": "How do I set up a Pregel application with two nodes and their respective channels in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/pregel.mdx"
+      ]
+    },
+    {
+      "id": "q87",
+      "category": "concept",
+      "question": "What technology is used for text-to-speech in the voice agent demo?",
+      "expected_source_files": [
+        "src/oss/langchain/voice-agent.mdx"
+      ]
+    },
+    {
+      "id": "q88",
+      "category": "how-to",
+      "question": "How do I use LangChain to embed text documents into numeric vectors?",
+      "expected_source_files": [
+        "src/oss/langchain/knowledge-base.mdx"
+      ]
+    },
+    {
+      "id": "q89",
+      "category": "how-to",
+      "question": "How do I install specific integrations for LangChain like OpenAI or Anthropic?",
+      "expected_source_files": [
+        "src/oss/langchain/install.mdx"
+      ]
+    },
+    {
+      "id": "q90",
+      "category": "concept",
+      "question": "What event type is triggered when the final, formatted transcript is available and what happens next?",
+      "expected_source_files": [
+        "src/oss/langchain/voice-agent.mdx"
+      ]
+    },
+    {
+      "id": "q91",
+      "category": "concept",
+      "question": "What is LangGraph, and does using LangChain require knowledge of it?",
+      "expected_source_files": [
+        "src/oss/concepts/products.mdx"
+      ]
+    },
+    {
+      "id": "q92",
+      "category": "concept",
+      "question": "How does the `entrypoint` with a `checkpointer` handle short-term memory across multiple invocations within the same thread?",
+      "expected_source_files": [
+        "src/oss/langgraph/functional-api.mdx"
+      ]
+    },
+    {
+      "id": "q93",
+      "category": "adversarial",
+      "question": "What's the best way to fine-tune a Stable Diffusion image model?",
+      "expected_source_files": []
+    },
+    {
+      "id": "q94",
+      "category": "adversarial",
+      "question": "How do I configure NGINX as a reverse proxy with TLS?",
+      "expected_source_files": []
+    },
+    {
+      "id": "q95",
+      "category": "adversarial",
+      "question": "How do I center a div vertically and horizontally in CSS?",
+      "expected_source_files": []
+    },
+    {
+      "id": "q96",
+      "category": "adversarial",
+      "question": "What's the syntax for a PostgreSQL window function?",
+      "expected_source_files": []
+    },
+    {
+      "id": "q97",
+      "category": "adversarial",
+      "question": "How do I train a YOLO object-detection model on a custom dataset?",
+      "expected_source_files": []
+    },
+    {
+      "id": "q98",
+      "category": "adversarial",
+      "question": "How do I set up CI/CD with GitHub Actions for a Rust project?",
+      "expected_source_files": []
+    },
+    {
+      "id": "q99",
+      "category": "adversarial",
+      "question": "What's the practical difference between TCP and UDP?",
+      "expected_source_files": []
+    },
+    {
+      "id": "q100",
+      "category": "adversarial",
+      "question": "How do I roll back the last three commits in Git without losing changes?",
+      "expected_source_files": []
+    }
+  ]
+}

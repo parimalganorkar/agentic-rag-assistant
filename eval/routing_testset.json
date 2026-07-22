@@ -1,0 +1,40 @@
+{
+  "description": "Handcrafted routing eval set — queries labeled with the path the LangGraph agent (Phase 8) should take, given the ACTUAL Phase 7 tools.",
+  "notes": [
+    "Five routing paths: 'retrieve' (answerable from the indexed docs corpus), 'get_package_version' (current PyPI version of a package — corpus is frozen so it can't answer), 'get_corpus_status' (meta questions about our own knowledge: freshness, pinned commit, coverage of a topic), 'fetch_live_doc' (need current/new/out-of-scope doc CONTENT the frozen corpus lacks), and 'clarify' (too ambiguous to answer without a follow-up).",
+    "Superseded the old retrieve/tool/clarify set: the synthetic 'ticket' tool was removed, and 'tool' is now three distinct tools the router must disambiguate.",
+    "Multi-intent queries list multiple correct paths; the Jaccard metric in eval/metrics.py scores predicted-vs-expected path sets.",
+    "Routing distinction cheat-sheet: 'latest VERSION of a package' -> get_package_version; 'how fresh / what commit / do you have docs on X' (about US) -> get_corpus_status; 'fetch/pull the current or newly-added doc page' (the CONTENT) -> fetch_live_doc; answerable from what we indexed -> retrieve.",
+    "Categories are informational — not used by the scorer.",
+    "This set is scored end-to-end in Phase 8 once the agent's router node exists."
+  ],
+  "queries": [
+    {"id": "r1",  "query": "How do I use InMemorySaver?",                                              "expected_paths": ["retrieve"],                        "category": "clear docs question"},
+    {"id": "r2",  "query": "What is a subagent in LangChain?",                                          "expected_paths": ["retrieve"],                        "category": "clear docs question"},
+    {"id": "r3",  "query": "How do I stream tokens from a LangGraph agent?",                            "expected_paths": ["retrieve"],                        "category": "clear docs question"},
+    {"id": "r4",  "query": "How do I create an agent with tools using create_agent?",                  "expected_paths": ["retrieve"],                        "category": "clear docs question"},
+    {"id": "r5",  "query": "How does runtime context work inside a tool?",                             "expected_paths": ["retrieve"],                        "category": "clear docs question"},
+    {"id": "r6",  "query": "Give me the docs on middleware.",                                          "expected_paths": ["retrieve"],                        "category": "clear docs question"},
+
+    {"id": "r7",  "query": "What's the latest version of langgraph on PyPI?",                          "expected_paths": ["get_package_version"],             "category": "package version"},
+    {"id": "r8",  "query": "Is langchain-core up to date? What's its newest release?",                 "expected_paths": ["get_package_version"],             "category": "package version"},
+    {"id": "r9",  "query": "Which version of langchain was released most recently?",                   "expected_paths": ["get_package_version"],             "category": "package version"},
+
+    {"id": "r10", "query": "How current are your docs, and what commit are they pinned to?",           "expected_paths": ["get_corpus_status"],               "category": "meta / knowledge boundary"},
+    {"id": "r11", "query": "Do you have any documentation on multi-agent systems?",                    "expected_paths": ["get_corpus_status"],               "category": "meta / coverage check"},
+    {"id": "r12", "query": "How many docs do you have and what products do they cover?",               "expected_paths": ["get_corpus_status"],               "category": "meta / coverage check"},
+
+    {"id": "r13", "query": "Fetch the current LangGraph Studio setup guide from the latest docs.",     "expected_paths": ["fetch_live_doc"],                  "category": "live doc content"},
+    {"id": "r14", "query": "Pull the up-to-date deployment guide straight from the GitHub docs.",      "expected_paths": ["fetch_live_doc"],                  "category": "live doc content"},
+    {"id": "r15", "query": "Is there a docs page for a feature added after your snapshot? Show it.",    "expected_paths": ["fetch_live_doc"],                  "category": "live / out-of-snapshot"},
+    {"id": "r16", "query": "I need the current docs for the OpenAI provider integration page.",        "expected_paths": ["fetch_live_doc"],                  "category": "live / out-of-scope"},
+
+    {"id": "r17", "query": "Can you help me fix this?",                                                "expected_paths": ["clarify"],                         "category": "no context"},
+    {"id": "r18", "query": "What should I use?",                                                        "expected_paths": ["clarify"],                         "category": "no context"},
+    {"id": "r19", "query": "help",                                                                     "expected_paths": ["clarify"],                         "category": "no context"},
+    {"id": "r20", "query": "It's broken.",                                                             "expected_paths": ["clarify"],                         "category": "no context"},
+
+    {"id": "r21", "query": "What's the latest langgraph version, and how do I install it?",            "expected_paths": ["get_package_version", "retrieve"], "category": "multi-intent"},
+    {"id": "r22", "query": "Are your docs current? If not, fetch me the newest streaming guide.",      "expected_paths": ["get_corpus_status", "fetch_live_doc"], "category": "multi-intent"}
+  ]
+}

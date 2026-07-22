@@ -1,0 +1,56 @@
+# Enterprise Support Knowledge Assistant — agentic RAG over LangChain/LangGraph docs.
+# Curated project dependencies, pinned to the versions this repo was validated on.
+# (Not a full `pip freeze` — the dev machine has many unrelated packages.)
+#
+# Install:  pip install -r requirements.txt
+# Python:   3.11+
+#
+# The LLM is llama3.1:8b served locally by Ollama — NOT a pip dependency. Install
+# Ollama separately (https://ollama.com), then `ollama pull llama3.1:8b`.
+
+# --- Ingestion & chunking (Phase 1-2) ---
+python-frontmatter==1.3.0        # strip/parse YAML frontmatter from MDX/MD
+langchain-text-splitters==1.1.2  # MarkdownHeaderTextSplitter + RecursiveCharacterTextSplitter
+transformers==5.13.0             # AutoTokenizer (bge-small WordPiece) for token-accurate chunking
+
+# --- Embedding & vector store (Phase 3) ---
+sentence-transformers==5.6.0     # BAAI/bge-small-en-v1.5 embeddings + cross-encoder reranker
+chromadb==1.5.9                  # local persistent vector store (cosine / HNSW)
+numpy==2.4.6                     # was pinned <2 early on; that constraint is stale — the current
+                                 # stack (torch/transformers/chromadb/ragas 0.3.9) runs fine on 2.x,
+                                 # verified by running retrieval + BM25 + ragas import end-to-end
+
+# --- Hybrid retrieval + rerank (Phase 5) ---
+rank-bm25==0.2.2                 # BM25Okapi sparse retrieval
+
+# --- Generation (Phase 4) ---
+ollama==0.6.2                    # Python client for the local Ollama server (llama3.1:8b)
+
+# --- Evaluation (Phase 6) ---
+ragas==0.3.9                     # LLM-judged RAG metrics (faithfulness, relevancy, context precision)
+langchain-huggingface==1.2.2     # HuggingFaceEmbeddings — bge-small as the RAGAS embedding judge
+langchain-google-genai==4.2.7    # ChatGoogleGenerativeAI — Gemini as the RAGAS judge LLM (cloud, eval-only)
+langchain-ollama==1.1.0          # ChatOllama — kept for the local-judge fallback path
+python-dotenv==1.2.2             # load GEMINI_API_KEY from .env for the judge (eval-only)
+
+# ragas 0.3.9 imports langchain_community.chat_models.vertexai at module load;
+# that path was removed in langchain-community >= 0.4, so it MUST stay < 0.4 or
+# `import ragas` fails. Do not bump without re-testing the eval scripts.
+langchain-community==0.3.31
+
+# --- MCP tool server (Phase 7) ---
+mcp==1.28.1                      # official MCP Python SDK (FastMCP server + stdio client)
+# `requests` (PyPI lookups in mcp_server/tools.py) already pulled in above.
+
+# --- LangGraph agent (Phase 8) ---
+langgraph==1.2.9                 # state-graph agent orchestration + MemorySaver checkpointer
+langgraph-checkpoint==4.1.1      # MemorySaver (multi-turn memory); pulled in by langgraph
+langchain-mcp-adapters==0.3.0    # exposes the Phase 7 MCP tools as LangChain/LangGraph tools
+# langchain-core / langchain already present via langchain-ollama (Phase 4/6).
+
+# --- Observability (Phase 10) ---
+langsmith==0.9.7                 # LangSmith tracing; auto-on when LANGSMITH_API_KEY is in .env
+# Caching (Phase 10) is a stdlib-only in-process module (agent/cache.py) — no new dep.
+
+# --- Frontend (Phase 11) ---
+streamlit==1.59.2                # chat UI; runs the agent via a cached background event loop

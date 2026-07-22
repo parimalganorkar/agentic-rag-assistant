@@ -1,0 +1,300 @@
+{
+  "n": 22,
+  "mean_jaccard": 0.932,
+  "exact_match_rate": 0.909,
+  "exact_matches": 20,
+  "fallback_uses": 0,
+  "rows": [
+    {
+      "id": "r1",
+      "query": "How do I use InMemorySaver?",
+      "expected": [
+        "retrieve"
+      ],
+      "predicted": [
+        "retrieve"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r2",
+      "query": "What is a subagent in LangChain?",
+      "expected": [
+        "retrieve"
+      ],
+      "predicted": [
+        "retrieve"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r3",
+      "query": "How do I stream tokens from a LangGraph agent?",
+      "expected": [
+        "retrieve"
+      ],
+      "predicted": [
+        "retrieve"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r4",
+      "query": "How do I create an agent with tools using create_agent?",
+      "expected": [
+        "retrieve"
+      ],
+      "predicted": [
+        "retrieve"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r5",
+      "query": "How does runtime context work inside a tool?",
+      "expected": [
+        "retrieve"
+      ],
+      "predicted": [
+        "retrieve"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r6",
+      "query": "Give me the docs on middleware.",
+      "expected": [
+        "retrieve"
+      ],
+      "predicted": [
+        "get_corpus_status"
+      ],
+      "jaccard": 0.0,
+      "exact": false,
+      "fallback": false
+    },
+    {
+      "id": "r7",
+      "query": "What's the latest version of langgraph on PyPI?",
+      "expected": [
+        "get_package_version"
+      ],
+      "predicted": [
+        "get_package_version"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r8",
+      "query": "Is langchain-core up to date? What's its newest release?",
+      "expected": [
+        "get_package_version"
+      ],
+      "predicted": [
+        "get_package_version",
+        "retrieve"
+      ],
+      "jaccard": 0.5,
+      "exact": false,
+      "fallback": false
+    },
+    {
+      "id": "r9",
+      "query": "Which version of langchain was released most recently?",
+      "expected": [
+        "get_package_version"
+      ],
+      "predicted": [
+        "get_package_version"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r10",
+      "query": "How current are your docs, and what commit are they pinned to?",
+      "expected": [
+        "get_corpus_status"
+      ],
+      "predicted": [
+        "get_corpus_status"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r11",
+      "query": "Do you have any documentation on multi-agent systems?",
+      "expected": [
+        "get_corpus_status"
+      ],
+      "predicted": [
+        "get_corpus_status"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r12",
+      "query": "How many docs do you have and what products do they cover?",
+      "expected": [
+        "get_corpus_status"
+      ],
+      "predicted": [
+        "get_corpus_status"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r13",
+      "query": "Fetch the current LangGraph Studio setup guide from the latest docs.",
+      "expected": [
+        "fetch_live_doc"
+      ],
+      "predicted": [
+        "fetch_live_doc"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r14",
+      "query": "Pull the up-to-date deployment guide straight from the GitHub docs.",
+      "expected": [
+        "fetch_live_doc"
+      ],
+      "predicted": [
+        "fetch_live_doc"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r15",
+      "query": "Is there a docs page for a feature added after your snapshot? Show it.",
+      "expected": [
+        "fetch_live_doc"
+      ],
+      "predicted": [
+        "fetch_live_doc"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r16",
+      "query": "I need the current docs for the OpenAI provider integration page.",
+      "expected": [
+        "fetch_live_doc"
+      ],
+      "predicted": [
+        "fetch_live_doc"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r17",
+      "query": "Can you help me fix this?",
+      "expected": [
+        "clarify"
+      ],
+      "predicted": [
+        "clarify"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r18",
+      "query": "What should I use?",
+      "expected": [
+        "clarify"
+      ],
+      "predicted": [
+        "clarify"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r19",
+      "query": "help",
+      "expected": [
+        "clarify"
+      ],
+      "predicted": [
+        "clarify"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r20",
+      "query": "It's broken.",
+      "expected": [
+        "clarify"
+      ],
+      "predicted": [
+        "clarify"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r21",
+      "query": "What's the latest langgraph version, and how do I install it?",
+      "expected": [
+        "get_package_version",
+        "retrieve"
+      ],
+      "predicted": [
+        "get_package_version",
+        "retrieve"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    },
+    {
+      "id": "r22",
+      "query": "Are your docs current? If not, fetch me the newest streaming guide.",
+      "expected": [
+        "fetch_live_doc",
+        "get_corpus_status"
+      ],
+      "predicted": [
+        "fetch_live_doc",
+        "get_corpus_status"
+      ],
+      "jaccard": 1.0,
+      "exact": true,
+      "fallback": false
+    }
+  ]
+}

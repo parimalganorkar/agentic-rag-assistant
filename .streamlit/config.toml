@@ -1,0 +1,19 @@
+# Phase 11 — base theme for the Docs Assistant UI (DARK).
+# Establishes the palette/typography; app/style.css layers the finer visual
+# design (bubbles, glassmorphism, hidden chrome) on top. Committed to a dark
+# product look — readable and high-contrast regardless of the browser setting.
+
+[theme]
+base = "dark"
+primaryColor = "#8B7CF6"                 # bright violet accent — pops on dark
+backgroundColor = "#0E0F16"              # deep near-black app canvas
+secondaryBackgroundColor = "#171922"     # sidebar / cards (one step lighter)
+textColor = "#E7E7F1"                    # high-contrast body text
+# System font stack — no external fetch, so the app stays fully offline-runnable.
+font = "sans serif"
+
+[server]
+runOnSave = true
+
+[browser]
+gatherUsageStats = false

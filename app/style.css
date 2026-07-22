@@ -1,0 +1,139 @@
+/* ========================================================================== *
+ * Phase 11 — premium DARK visual layer for the Docs Assistant.                *
+ * Injected once via st.markdown(<style>) from streamlit_app.py.               *
+ * Targeting uses stable data-testid attributes and Streamlit's .st-key-<key>  *
+ * container classes, so overrides hit specific widgets without breaking the   *
+ * global layout.                                                              *
+ * ========================================================================== */
+
+:root {
+  --bg: #0E0F16;
+  --surface: #171922;      /* cards / sidebar */
+  --surface-2: #1E212D;    /* hover / raised */
+  --accent: #8B7CF6;
+  --accent-2: #A78BFA;
+  --ink: #E7E7F1;
+  --muted: #9A9AB2;
+  --border: #262A38;
+  --ring: rgba(139, 124, 246, 0.28);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --radius: 16px;
+}
+
+/* ---- 1. Clean the canvas: hide default Streamlit chrome ------------------- */
+#MainMenu,
+[data-testid="stMainMenu"],
+[data-testid="stToolbar"],
+[data-testid="stAppDeployButton"],
+[data-testid="stDecoration"],
+footer,
+[data-testid="stStatusWidget"] { display: none !important; }
+
+/* Keep the header (holds the sidebar collapse control) but transparent, so the
+   app reads as a standalone product. Do NOT force height:0 — that made the
+   collapse control overflow to the top of the page. */
+[data-testid="stHeader"] { background: transparent !important; }
+
+[data-testid="stMainBlockContainer"] { padding-top: 2.2rem; max-width: 820px; }
+
+/* ---- 2. Base surface ---------------------------------------------------- */
+/* NB: we deliberately DO NOT override font-family here. A broad selector like
+   [class*="st-"] also matches Streamlit's Material-icon spans and breaks their
+   ligatures, so chevrons and the sidebar toggle render as literal text
+   ("keyboard_double_arrow_right"). The font comes from .streamlit/config.toml
+   (font = "sans serif"), which Streamlit applies without touching icon fonts. */
+[data-testid="stAppViewContainer"] { background: var(--bg); color: var(--ink); }
+h1 { font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+[data-testid="stCaptionContainer"], .stCaption, small { color: var(--muted) !important; }
+
+/* ---- 3. Sidebar: soft dark glass ---------------------------------------- */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #14151F 0%, #101119 100%);
+  border-right: 1px solid var(--border);
+}
+[data-testid="stSidebar"] * { color: var(--ink); }
+
+/* New-chat button (key="new_chat") — full-width accent pill. */
+.st-key-new_chat button {
+  background: linear-gradient(180deg, var(--accent-2), var(--accent)) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 6px 18px var(--ring) !important;
+  transition: transform .08s ease, box-shadow .15s ease;
+}
+.st-key-new_chat button:hover { transform: translateY(-1px); box-shadow: 0 8px 22px var(--ring) !important; }
+
+/* Conversation-list buttons (key="open_<id>") — quiet rows that light up. */
+[class*="st-key-open_"] button {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  color: var(--ink) !important;
+  font-weight: 500 !important;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+[class*="st-key-open_"] button:hover { background: var(--surface-2) !important; border-color: var(--border) !important; }
+/* The active conversation renders as disabled — style it as the selected row. */
+[class*="st-key-open_"] button:disabled {
+  background: var(--surface-2) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent-2) !important;
+  opacity: 1 !important;
+}
+/* Delete buttons (key="del_<id>") — muted, red on hover. */
+[class*="st-key-del_"] button {
+  background: transparent !important; border: none !important; color: var(--muted) !important;
+  padding: 0 !important;
+}
+[class*="st-key-del_"] button:hover { color: #F85149 !important; }
+
+/* ---- 4. Chat bubbles ----------------------------------------------------- */
+/* Role markers are invisible spans emitted inside each message so we can style
+   user vs assistant reliably regardless of avatar testids. */
+.role-user, .role-assistant { display: none; }
+
+[data-testid="stChatMessage"] {
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+  margin: 0.4rem 0;
+  border: 1px solid var(--border);
+}
+/* Assistant: raised dark card. */
+[data-testid="stChatMessage"]:has(.role-assistant) {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+/* User: violet-tinted dark bubble. */
+[data-testid="stChatMessage"]:has(.role-user) {
+  background: linear-gradient(180deg, #241F45 0%, #1E1A3A 100%);
+  border-color: #3A327A;
+}
+[data-testid="stChatMessage"] * { color: var(--ink); }
+
+/* ---- 5. Chat input: floating rounded bar --------------------------------- */
+[data-testid="stChatInput"] {
+  border-radius: 14px !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow);
+  background: var(--surface) !important;
+}
+[data-testid="stChatInput"] textarea { color: var(--ink) !important; font-size: 0.98rem; }
+[data-testid="stChatInput"] textarea::placeholder { color: var(--muted) !important; }
+
+/* ---- 6. Expanders & misc ------------------------------------------------- */
+[data-testid="stExpander"] {
+  border-radius: 12px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+}
+[data-testid="stExpander"] summary { color: var(--ink) !important; }
+[data-testid="stExpander"] summary:hover { color: var(--accent-2) !important; }
+
+/* Status dots for the backend panel. */
+.status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+.dot-on  { background:#3FB950; box-shadow:0 0 0 3px #3FB95022; }
+.dot-off { background:#6E7681; box-shadow:0 0 0 3px #6E768122; }

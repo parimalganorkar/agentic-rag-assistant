@@ -1,0 +1,159 @@
+{
+  "description": "Handcrafted retrieval eval set — 15 QA pairs with the source files the retriever SHOULD return in its top-K. Every expected_source_file has been verified against data/cleaned/manifest.json.",
+  "notes": [
+    "expected_source_files is a set of paths RELATIVE to data/raw/ that are relevant to the question. Retrieval returns chunks; we score at the FILE level (unique source_files in top-K vs expected).",
+    "expected_keywords are heuristic keyword checks for LLM answers — not used by the retrieval metrics but useful if you want to spot-check answer quality later.",
+    "adversarial entries have empty expected_source_files; a well-tuned pipeline should retrieve low-similarity chunks that the LLM then refuses to ground on.",
+    "Categories: how-to, concept, keyword (exact-term), reference, adversarial. Balance is deliberate so we see where each retrieval strategy wins."
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "category": "how-to",
+      "question": "How do I use a memory checkpoint in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/persistence.mdx",
+        "src/oss/langgraph/checkpointers.mdx",
+        "src/oss/langgraph/stores.mdx"
+      ],
+      "expected_keywords": ["checkpointer", "InMemorySaver", "thread_id", "compile"]
+    },
+    {
+      "id": "q2",
+      "category": "how-to",
+      "question": "How do I create an agent with tools in LangChain?",
+      "expected_source_files": [
+        "src/oss/langchain/agents.mdx",
+        "src/oss/langchain/tools.mdx"
+      ],
+      "expected_keywords": ["create_agent", "tools", "model"]
+    },
+    {
+      "id": "q3",
+      "category": "keyword",
+      "question": "How do I use InMemorySaver as a checkpointer?",
+      "expected_source_files": [
+        "src/oss/langgraph/checkpointers.mdx",
+        "src/oss/langgraph/persistence.mdx"
+      ],
+      "expected_keywords": ["InMemorySaver", "checkpointer", "compile"]
+    },
+    {
+      "id": "q4",
+      "category": "how-to",
+      "question": "How do I stream tokens from an agent as it runs?",
+      "expected_source_files": [
+        "src/oss/langchain/streaming.mdx",
+        "src/oss/langgraph/streaming.mdx"
+      ],
+      "expected_keywords": ["stream", "tokens", "invoke"]
+    },
+    {
+      "id": "q5",
+      "category": "keyword",
+      "question": "How do I bind tools to a chat model?",
+      "expected_source_files": [
+        "src/oss/langchain/models.mdx",
+        "src/oss/langchain/tools.mdx"
+      ],
+      "expected_keywords": ["bind_tools", "tool_calls", "model"]
+    },
+    {
+      "id": "q6",
+      "category": "concept",
+      "question": "What is a subagent in LangChain multi-agent systems?",
+      "expected_source_files": [
+        "src/oss/langchain/multi-agent/subagents.mdx"
+      ],
+      "expected_keywords": ["subagent", "supervisor", "handoff"]
+    },
+    {
+      "id": "q7",
+      "category": "how-to",
+      "question": "How do I return structured output from an agent?",
+      "expected_source_files": [
+        "src/oss/langchain/structured-output.mdx",
+        "src/oss/langchain/agents.mdx"
+      ],
+      "expected_keywords": ["response_format", "structured", "schema"]
+    },
+    {
+      "id": "q8",
+      "category": "concept",
+      "question": "What is short-term memory in LangGraph and how is it scoped?",
+      "expected_source_files": [
+        "src/oss/langchain/short-term-memory.mdx",
+        "src/oss/concepts/memory.mdx"
+      ],
+      "expected_keywords": ["short-term", "memory", "thread"]
+    },
+    {
+      "id": "q9",
+      "category": "how-to",
+      "question": "How do I add long-term memory to an agent?",
+      "expected_source_files": [
+        "src/oss/langchain/long-term-memory.mdx",
+        "src/oss/langgraph/stores.mdx"
+      ],
+      "expected_keywords": ["long-term", "store", "memory"]
+    },
+    {
+      "id": "q10",
+      "category": "how-to",
+      "question": "How do I add human-in-the-loop review to a LangChain agent?",
+      "expected_source_files": [
+        "src/oss/langchain/human-in-the-loop.mdx"
+      ],
+      "expected_keywords": ["interrupt", "approve", "human"]
+    },
+    {
+      "id": "q11",
+      "category": "concept",
+      "question": "What is the difference between a checkpointer and a store in LangGraph?",
+      "expected_source_files": [
+        "src/oss/langgraph/persistence.mdx",
+        "src/oss/langgraph/stores.mdx",
+        "src/oss/langgraph/checkpointers.mdx"
+      ],
+      "expected_keywords": ["checkpointer", "store", "thread", "across"]
+    },
+    {
+      "id": "q12",
+      "category": "how-to",
+      "question": "How do I write custom middleware for an agent?",
+      "expected_source_files": [
+        "src/oss/langchain/middleware/custom.mdx",
+        "src/oss/langchain/middleware/overview.mdx"
+      ],
+      "expected_keywords": ["middleware", "wrap_model_call", "before_model"]
+    },
+    {
+      "id": "q13",
+      "category": "reference",
+      "question": "What can I access through the ToolRuntime object inside a tool?",
+      "expected_source_files": [
+        "src/oss/langchain/runtime.mdx",
+        "src/oss/langchain/tools.mdx"
+      ],
+      "expected_keywords": ["runtime", "context", "state", "store"]
+    },
+    {
+      "id": "q14",
+      "category": "keyword",
+      "question": "How does create_agent work with middleware?",
+      "expected_source_files": [
+        "src/oss/langchain/agents.mdx",
+        "src/oss/langchain/middleware/overview.mdx",
+        "src/oss/langchain/middleware/custom.mdx"
+      ],
+      "expected_keywords": ["create_agent", "middleware", "harness"]
+    },
+    {
+      "id": "q15",
+      "category": "adversarial",
+      "question": "How do I set up a Kubernetes cluster with Helm charts?",
+      "expected_source_files": [],
+      "expected_keywords": ["I don't have enough information"]
+    }
+  ]
+}
