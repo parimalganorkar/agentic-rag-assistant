@@ -32,6 +32,7 @@ class AgentState(TypedDict, total=False):
     answer: str                      # final answer text
     clarification: str               # clarifying question (clarify path)
     escalated: bool                  # retrieval was weak -> escalated to fetch_live_doc
+    scope_overruled: bool            # router said out_of_scope, but retrieval was confident -> answered anyway
 
     # --- Guardrails (Phase 9) ---------------------------------------------
     # INPUT stage (agent.guards.check_input)
@@ -45,7 +46,7 @@ class AgentState(TypedDict, total=False):
     guard_action: str                # pass | repair | refuse
     guard_reason: str                # why the answer was refused
     guard_repairs: list[str]         # what was fixed rather than refused
-    guard_degraded: bool             # an LLM guard failed open (verifier unavailable)
+    guard_degraded: bool             # every LLM judge was unavailable (turn refused as unverifiable)
     relevance: float                 # question<->answer cosine similarity
     grounded: bool                   # did the answer pass the fact check
     unsupported: list[str]           # claims the fact checker couldn't support

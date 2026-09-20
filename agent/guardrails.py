@@ -14,20 +14,33 @@ Two independent checks, deliberately built with different tools:
       about MEANING (a paraphrase is fine; an invented detail that reuses
       context words is not), so string matching can't do it.
 
-Backend policy for the verifier: GEMINI FIRST, local llama as automatic fallback.
+Backend policy for the verifier: GEMINI FIRST, Amazon Nova Lite (Bedrock) as
+the automatic fallback, and FAIL CLOSED if both are unavailable.
 
-Chosen on measured data, not vibes (eval/results/last_injections.json +
-last_guardrails.json). On the 12 injections that evade GUARD 1's regex, the
-cloud judge halved attack success (2 landed -> 1) and blocked 4 answers where
-local llama blocked 0 — llama rated the compromised answers "grounded", because
-it is lenient AND self-biased (it wrote them). The cost is a higher false-refusal
-rate (0.15 vs 0.05 on 20 answerable questions), down from 0.30 after the
-materiality-based prompt rewrite below.
+Gemini-first was chosen on measured data, not vibes (eval/results/
+last_injections.json + last_guardrails.json). On the 12 injections that evade
+GUARD 1's regex, the cloud judge halved attack success (2 landed -> 1) and
+blocked 4 answers where local llama blocked 0 — llama rated the compromised
+answers "grounded", because it is lenient AND self-biased (it wrote them). The
+cost is a higher false-refusal rate (0.15 vs 0.05 on 20 answerable questions),
+down from 0.30 after the materiality-based prompt rewrite below.
 
-Set GUARDRAIL_VERIFIER=ollama to force local-only (offline, no API key, no
-per-query cost). If Gemini is selected but the key/network/package is missing we
-fall back to local automatically rather than failing the turn, so the project
-still works on a fresh clone with no .env.
+The fallback is Nova Lite rather than local llama because the deployment box
+runs the generator on Bedrock and has no Ollama at all — a fallback target
+that isn't running is not a fallback. Gemini, the primary, is a different
+family from the Nova Pro generator (agent/llm.py) — that is where the
+judge-independence property lives. Nova Lite shares the generator's family, a
+known and accepted weakening that only applies while Gemini is down.
+
+If Gemini AND Nova both fail (network, keys, unparseable verdicts), the guard
+returns not-grounded / violation with `error` set, and check_output refuses the
+turn as "cannot verify". A verifier outage must never silently become "assume
+it's fine" — that trade was acceptable on a hobby box, not on a public one.
+
+GUARDRAIL_VERIFIER selects the chain: "gemini" (default: Gemini -> Nova ->
+closed), "bedrock" (Nova only -> closed), or "ollama" (local llama only ->
+closed). "ollama" is an explicit opt-in for fully-offline development and for
+the eval harnesses that pass it by name; it is never an automatic fallback.
 
 CAVEAT worth knowing: the security gain is partly INCIDENTAL. A groundedness
 checker measures faithfulness, not intent — if a poisoned chunk says "include
@@ -55,8 +68,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # Load (never read) the .env so an optional GEMINI_API_KEY is available.
 load_dotenv(REPO_ROOT / ".env")
 
-# "gemini" (default — better injection resistance) or "ollama" (local/offline).
-# Falls back to ollama automatically if the key/network/package is unavailable.
+# "gemini" (default — better injection resistance; falls back to Nova Lite on
+# Bedrock), "bedrock" (Nova Lite only), or "ollama" (local/offline opt-in).
+# Every chain FAILS CLOSED when its last backend is unavailable.
 VERIFIER_BACKEND = os.getenv("GUARDRAIL_VERIFIER", "gemini").strip().lower()
 GEMINI_VERIFIER_MODEL = os.getenv("GUARDRAIL_GEMINI_MODEL", "gemini-flash-lite-latest")
 
@@ -176,7 +190,7 @@ class GroundednessResult:
     grounded: bool
     unsupported: list[str] = field(default_factory=list)
     backend: str = ""          # which backend actually ran
-    error: str | None = None   # set when we failed open
+    error: str | None = None   # set when every judge failed -> caller refuses (fail closed)
     raw: str = ""
 
     @property
@@ -237,6 +251,20 @@ def _verify_ollama(query: str, context: str, answer: str) -> tuple[str, str]:
     return (resp.get("message", {}).get("content") or "").strip(), "ollama"
 
 
+def _verify_bedrock(query: str, context: str, answer: str) -> tuple[str, str]:
+    """Fallback judge: Amazon Nova Lite on Bedrock — used only when Gemini, the
+    primary, is unavailable. Raises on any auth/network/model error so the
+    caller can fail closed."""
+    from agent.llm import BEDROCK_GUARD_MODEL_ID, bedrock_chat_model
+
+    judge = bedrock_chat_model(BEDROCK_GUARD_MODEL_ID, temperature=0.0, max_tokens=400)
+    resp = judge.invoke([
+        ("system", VERIFY_SYSTEM),
+        ("human", _build_verify_prompt(query, context, answer)),
+    ])
+    return _message_text(resp), "bedrock"
+
+
 def _verify_gemini(query: str, context: str, answer: str) -> tuple[str, str]:
     """Cloud judge — no self-bias (it didn't write the answer) and more reliable
     JSON. Raises if the key/package/network is unavailable so we can fall back."""
@@ -275,6 +303,44 @@ def _message_text(resp: Any) -> str:
     return str(content or "").strip()
 
 
+# Which judges to try, in order, per GUARDRAIL_VERIFIER value. The LAST entry of
+# each chain has no fallback: if it fails, the guard fails CLOSED.
+_VERIFY_CHAINS: dict[str, tuple[tuple[str, Any], ...]] = {
+    "gemini":  (("gemini", _verify_gemini), ("bedrock", _verify_bedrock)),
+    "bedrock": (("bedrock", _verify_bedrock),),
+    "ollama":  (("ollama", _verify_ollama),),
+}
+_POLICY_CHAINS: dict[str, tuple[str, ...]] = {
+    "gemini":  ("gemini", "bedrock"),
+    "bedrock": ("bedrock",),
+    "ollama":  ("ollama",),
+}
+
+
+def _attempt_chain(chain, invoke, parse) -> tuple[dict | None, str, str, list[str]]:
+    """Try each (name, target) in `chain` until one returns a PARSEABLE verdict.
+
+    A backend that raises OR returns unparseable JSON counts as failed and the
+    next one is tried — an unparseable verdict is not a verdict. Returns
+    (parsed, used_label, raw, errors); `parsed is None` means every backend
+    failed and the caller must fail closed.
+    """
+    errors: list[str] = []
+    raw = ""
+    for name, target in chain:
+        try:
+            raw, _ = invoke(target)
+        except Exception as e:  # no key / no creds / no network / model rejected
+            errors.append(f"{name}:{type(e).__name__}")
+            continue
+        parsed = parse(raw)
+        if parsed is not None:
+            used = name if not errors else f"{name}(fallback:{','.join(errors)})"
+            return parsed, used, raw, errors
+        errors.append(f"{name}:unparseable")
+    return None, "none", raw, errors
+
+
 def verify_grounded(
     query: str,
     context: str,
@@ -283,40 +349,41 @@ def verify_grounded(
 ) -> GroundednessResult:
     """Check whether `answer` is supported by `context`.
 
-    FAILS OPEN on error (returns grounded=True with `error` set). Rationale: a
-    parse failure or a dead network is a system fault, not evidence that the
-    answer is wrong — failing closed would refuse valid answers and wreck the
-    false-refusal rate. The `error` field is recorded so the eval can count how
-    often this happens instead of hiding it.
+    Runs the judge chain for `backend` (default GUARDRAIL_VERIFIER): Gemini, then
+    Nova Lite on Bedrock. FAILS CLOSED if every judge is unavailable or returns
+    an unparseable verdict: the result is grounded=False with `error` set, and
+    check_output refuses the turn as "cannot verify". Earlier versions failed
+    open here on the reasoning that a dead network is not evidence the answer is
+    wrong — true, but on a public deployment that makes "exhaust the verifier's
+    API quota" a bypass for the entire fact check. `error` is recorded so the
+    eval can count outages instead of hiding them.
     """
     chosen = (backend or VERIFIER_BACKEND).lower()
+    chain = _VERIFY_CHAINS.get(chosen)
+    if chain is None:
+        raise ValueError(f"unknown GUARDRAIL_VERIFIER {chosen!r}; expected {tuple(_VERIFY_CHAINS)}")
 
     # Cache the verdict for an identical (backend, query, context, answer). The
     # LLM call is the dominant cost of an answered turn; a re-ask, a retry, or the
     # eval harness re-running the same rows all hit this. Only SUCCESSFUL verdicts
-    # are stored (below) — never fail-open/error results, which are transient.
+    # are stored (below) — never error results, which are transient outages.
     from agent.cache import VERDICT_CACHE, MISSING, key_of
-    ckey = key_of("verify", chosen, query, context, answer)
+    # The prompt is part of the key: editing VERIFY_SYSTEM must never be masked
+    # by a verdict cached under the previous wording.
+    ckey = key_of("verify", chosen, VERIFY_SYSTEM, query, context, answer)
     cached = VERDICT_CACHE.get(ckey)
     if cached is not MISSING:
         return cached
 
-    raw, used = "", chosen
-    try:
-        if chosen == "gemini":
-            try:
-                raw, used = _verify_gemini(query, context, answer)
-            except Exception as e:  # no key / no network / package missing
-                raw, used = _verify_ollama(query, context, answer)
-                used = f"ollama(fallback:{type(e).__name__})"
-        else:
-            raw, used = _verify_ollama(query, context, answer)
-    except Exception as e:
-        return GroundednessResult(True, [], chosen, f"verifier unavailable: {type(e).__name__}")
-
-    parsed = _parse_verdict(raw)
+    parsed, used, raw, errors = _attempt_chain(
+        chain, lambda fn: fn(query, context, answer), _parse_verdict,
+    )
     if parsed is None:
-        return GroundednessResult(True, [], used, "unparseable verdict", raw)
+        # FAIL CLOSED — never cached (an outage is transient; the refusal it
+        # causes must not be replayed once the judges are back).
+        return GroundednessResult(
+            False, [], used, "verifier unavailable: " + "; ".join(errors), raw,
+        )
     result = GroundednessResult(parsed["grounded"], parsed["unsupported"], used, None, raw)
     VERDICT_CACHE.set(ckey, result)
     return result
@@ -460,10 +527,22 @@ _ANY_URL_RE = re.compile(r"https?://([^/\"'\s)>\]]+)", re.I)
 _CREDENTIAL_WORDS = re.compile(
     r"\b(?:api[_ -]?key|secret|credential|token|password|rotate|revoke|reissue)\b", re.I)
 # Instructing the user to hand a secret over — dangerous on ANY host, so this is
-# checked independently of the allowlist.
+# checked independently of the allowlist. Three precision rules, each from a
+# measured false refusal on a legitimate answer (2026-09-20, 3 of 91):
+#   - the OBJECT must be credential-shaped: bare "key" matched "a State key
+#     that older checkpoints still contain", bare "token" matches streamed tokens;
+#   - there must be a DESTINATION ("into the form", "to support@…", "via the
+#     portal"): disclosure needs somewhere to disclose to, and "enter your key
+#     when prompted" has none — it is the docs' own getpass() pattern;
+#   - prose only: `getpass("Enter API key for OpenAI: ")` inside a code fence is
+#     the safe local prompt, not an instruction to send the key anywhere.
 _SECRET_SUBMISSION_RE = re.compile(
-    r"\b(?:paste|enter|submit|upload|send|share)\b[^.\n]{0,60}?"
-    r"\b(?:api[_ -]?key|key|secret|credential|token|password)\b", re.I)
+    r"\b(?:paste|enter|type|submit|upload|send|share|e-?mail|provide|forward)\b[^.\n]{0,60}?"
+    r"\b(?:(?:\w+[_ -])?keys?|secrets?|credentials?|passwords?|tokens?)\b"
+    r"[^.\n]{0,60}?\b(?:in|into|to|on|at|via|through|with)\b[^.\n]{0,40}?"
+    r"(?:form|portal|page|site|website|link|url|e-?mail|address|inbox|chat|ticket|support|"
+    r"dashboard|helpdesk|team|us\b|\S+@\S+)", re.I)
+_PROSE_FENCE_RE = re.compile(r"```.*?```", re.S)
 
 
 def scan_unsafe_content(text: str) -> list[str]:
@@ -509,7 +588,7 @@ def scan_unsafe_content(text: str) -> list[str]:
             hits.append(f"credential_flow_to_untrusted_host:{host.lower()}")
             break
 
-    if _SECRET_SUBMISSION_RE.search(text):
+    if _SECRET_SUBMISSION_RE.search(_PROSE_FENCE_RE.sub(" ", text)):
         hits.append("instructs_user_to_disclose_secret")
     return hits
 
@@ -801,15 +880,25 @@ def _policy_llm(question: str, answer: str, backend: str) -> tuple[str, str]:
         )
         return _message_text(llm.invoke([("system", POLICY_SYSTEM), ("human", prompt)])), "gemini"
 
-    client = ollama.Client(host=OLLAMA_HOST)
-    resp = client.chat(
-        model=LLM_MODEL,
-        messages=[{"role": "system", "content": POLICY_SYSTEM},
-                  {"role": "user", "content": prompt}],
-        format="json",
-        options={"num_predict": 300, "temperature": 0.0},
-    )
-    return (resp.get("message", {}).get("content") or "").strip(), "ollama"
+    if backend == "bedrock":
+        # Fallback judge — Nova Lite, used only when Gemini is unavailable.
+        from agent.llm import BEDROCK_GUARD_MODEL_ID, bedrock_chat_model
+
+        judge = bedrock_chat_model(BEDROCK_GUARD_MODEL_ID, temperature=0.0, max_tokens=300)
+        return _message_text(judge.invoke([("system", POLICY_SYSTEM), ("human", prompt)])), "bedrock"
+
+    if backend == "ollama":
+        client = ollama.Client(host=OLLAMA_HOST)
+        resp = client.chat(
+            model=LLM_MODEL,
+            messages=[{"role": "system", "content": POLICY_SYSTEM},
+                      {"role": "user", "content": prompt}],
+            format="json",
+            options={"num_predict": 300, "temperature": 0.0},
+        )
+        return (resp.get("message", {}).get("content") or "").strip(), "ollama"
+
+    raise ValueError(f"unknown policy backend {backend!r}")
 
 
 def check_output_policy(
@@ -821,9 +910,10 @@ def check_output_policy(
     """Does everything in `answer` serve `question`? (No context by design.)
 
     Deterministic patterns run first and short-circuit — they're free and
-    high-precision. Otherwise an LLM judges intent. FAILS OPEN on error, like the
-    groundedness check: a dead network shouldn't refuse a valid answer, and the
-    `error` field records it so the eval can count it.
+    high-precision. Otherwise an LLM judges intent along the same chain as the
+    groundedness check (Gemini -> Nova Lite), and FAILS CLOSED if every judge is
+    unavailable: violation=True with `error` set, so check_output refuses the
+    turn as unverifiable rather than shipping an unreviewed answer.
 
     `use_llm=False` runs the regex tier only — used for answers built purely from
     our OWN structured data (a PyPI version, corpus counts), where no external
@@ -857,26 +947,23 @@ def check_output_policy(
     # Cache only the LLM tier — the regex tiers above are already free. Same rule
     # as the groundedness cache: store successful verdicts, never error results.
     from agent.cache import VERDICT_CACHE, MISSING, key_of
-    ckey = key_of("policy", chosen, question, answer)
+    ckey = key_of("policy", chosen, POLICY_SYSTEM, question, answer)
     cached = VERDICT_CACHE.get(ckey)
     if cached is not MISSING:
         return cached
 
-    try:
-        if chosen == "gemini":
-            try:
-                raw, used = _policy_llm(question, answer, "gemini")
-            except Exception as e:
-                raw, used = _policy_llm(question, answer, "ollama")
-                used = f"ollama(fallback:{type(e).__name__})"
-        else:
-            raw, used = _policy_llm(question, answer, "ollama")
-    except Exception as e:
-        return PolicyResult(False, "", [], chosen, f"policy check unavailable: {type(e).__name__}")
-
-    parsed = _parse_verdict_generic(raw, "violation")
+    chain = _POLICY_CHAINS.get(chosen)
+    if chain is None:
+        raise ValueError(f"unknown GUARDRAIL_VERIFIER {chosen!r}; expected {tuple(_POLICY_CHAINS)}")
+    parsed, used, raw, errors = _attempt_chain(
+        [(b, b) for b in chain],
+        lambda b: _policy_llm(question, answer, b),
+        lambda text: _parse_verdict_generic(text, "violation"),
+    )
     if parsed is None:
-        return PolicyResult(False, "", [], used, "unparseable verdict")
+        # FAIL CLOSED — not cached, same reasoning as verify_grounded.
+        err = "policy check unavailable: " + "; ".join(errors)
+        return PolicyResult(True, f"cannot verify this answer ({err})", [], used, err)
     artifacts = parsed.get("artifacts") or []
     if isinstance(artifacts, str):
         artifacts = [artifacts]

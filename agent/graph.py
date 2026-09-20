@@ -9,13 +9,26 @@ and the live-fetch escalation come in later steps.
     START → precheck ─(answer cached)────────────────────────────────────────┐
               │ (miss)                                                        │
               ↓                                                               │
-            route ─┬─ "retrieve"  → retrieve → guard_input ┬─(good)→ generate ┤
-                   │                                        └─(weak)→ escalate ┤
-                   ├─ "call_tool" → call_tool → sanitize_tool ─────→ generate ─┤
-                   └─ "clarify"   → clarify ───────────────────────────────────┤
-                                                                               ↓
+            route ─┬─ "retrieve" ──┐
+                   ├─ "out_of_scope"┴→ retrieve → guard_input ┬─(conf ≥ 2.0)→ generate ┤
+                   │                    (router's call is a prior; │─(weak, in-domain)→ escalate ┤
+                   │                     confident retrieval        └─(weak, out_of_scope)→ out_of_scope ┐
+                   │                     overrules it)                                                    │
+                   ├─ "call_tool" → call_tool → sanitize_tool ─────→ generate ───────────────────────────┤
+                   └─ "clarify"   → clarify ─────────────────────────────────────────────────────────────┤
+                                                                                                         ↓
                        generate → guard_output ─(ok / repaired)→ finalize → END
                                         └─(unsafe)→ refuse ↗
+
+`out_of_scope` is the router saying "this isn't a LangChain/LangGraph question at
+all". It is treated as a PRIOR: retrieval still runs, and if the top rerank
+logit clears the confidence gate the docs evidently cover the topic and the turn
+proceeds as a normal retrieve (state.scope_overruled=True). Only when retrieval
+agrees does the fixed refusal fire — with no live fetch, no generation and no
+judge, so it skips guard_output (which exists to check LLM text). Added after
+"why is the sky blue?" was answered from the docs' own streaming example; the
+evidence check was added after the router alone refused 4 of 91 legitimate
+questions on the deployed generator — see agent/router.py.
 
 `precheck` (Phase 10) scrubs PII and checks the full-answer cache; a hit skips the
 router LLM call, retrieval, generation and all guards, because only clean
@@ -76,6 +89,7 @@ def build_agent(tools: dict | None = None, checkpointer=None):
     graph.add_node("call_tool", nodes.make_call_tool_node(tools))
     graph.add_node("sanitize_tool", nodes.sanitize_tool_node)    # INPUT STAGE (live doc)
     graph.add_node("clarify", nodes.clarify_node)
+    graph.add_node("out_of_scope", nodes.out_of_scope_node)   # fixed refusal, no LLM
     graph.add_node("generate", nodes.generate_node)
     graph.add_node("guard_output", nodes.guard_output_node)      # OUTPUT STAGE
     graph.add_node("refuse", nodes.refuse_node)
@@ -101,7 +115,7 @@ def build_agent(tools: dict | None = None, checkpointer=None):
     graph.add_conditional_edges(
         "guard_input",
         nodes.retrieval_gate,
-        {"generate": "generate", "escalate": "escalate"},
+        {"generate": "generate", "escalate": "escalate", "out_of_scope": "out_of_scope"},
     )
     graph.add_edge("escalate", "call_tool")
     graph.add_edge("call_tool", "sanitize_tool")
@@ -121,6 +135,9 @@ def build_agent(tools: dict | None = None, checkpointer=None):
     # from raw user input reached the user with NO output guard at all. Every
     # LLM-generated path now goes through guard_output.
     graph.add_edge("clarify", "guard_output")
+    # No LLM output to check on the out-of-scope path — a canned string — so it
+    # joins the refuse path's shortcut to finalize.
+    graph.add_edge("out_of_scope", "finalize")
     graph.add_edge("finalize", END)
 
     return graph.compile(checkpointer=checkpointer)

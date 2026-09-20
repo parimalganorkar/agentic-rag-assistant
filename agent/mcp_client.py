@@ -17,6 +17,7 @@ Run this module directly to smoke-test the bridge:  python -m agent.mcp_client
 from __future__ import annotations
 
 import json
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -37,10 +38,16 @@ EXPECTED_TOOLS = ("get_package_version", "get_corpus_status", "fetch_live_doc")
 def _connections() -> dict:
     """stdio connection spec for our FastMCP server. `cwd` matters: the server
     does `import mcp_server...` / `import ingestion...`, which only resolve from
-    the repo root."""
+    the repo root.
+
+    `sys.executable`, not a bare "python": the server must run under the SAME
+    interpreter (and site-packages) as the agent. A bare "python" only worked on
+    the dev box because the venv happened to be on PATH; under systemd on a
+    fresh Ubuntu host it resolves to nothing, or to the system interpreter with
+    none of our packages, and the app dies at warm-up."""
     return {
         SERVER_NAME: {
-            "command": "python",
+            "command": sys.executable,
             "args": ["-m", "mcp_server.server"],
             "transport": "stdio",
             "cwd": str(REPO_ROOT),

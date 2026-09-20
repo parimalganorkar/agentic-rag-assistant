@@ -5,8 +5,9 @@
 # Install:  pip install -r requirements.txt
 # Python:   3.11+
 #
-# The LLM is llama3.1:8b served locally by Ollama — NOT a pip dependency. Install
-# Ollama separately (https://ollama.com), then `ollama pull llama3.1:8b`.
+# The default LLM is llama3.1:8b served locally by Ollama — NOT a pip dependency.
+# Install Ollama separately (https://ollama.com), then `ollama pull llama3.1:8b`.
+# Set LLM_PROVIDER=bedrock to generate with Amazon Nova Pro on AWS Bedrock instead.
 
 # --- Ingestion & chunking (Phase 1-2) ---
 python-frontmatter==1.3.0        # strip/parse YAML frontmatter from MDX/MD
@@ -47,6 +48,12 @@ langgraph==1.2.9                 # state-graph agent orchestration + MemorySaver
 langgraph-checkpoint==4.1.1      # MemorySaver (multi-turn memory); pulled in by langgraph
 langchain-mcp-adapters==0.3.0    # exposes the Phase 7 MCP tools as LangChain/LangGraph tools
 # langchain-core / langchain already present via langchain-ollama (Phase 4/6).
+
+# --- Bedrock provider (deployment) ---
+langchain-aws==1.7.8             # ChatBedrockConverse — Nova Pro generator + Nova Lite guard fallback
+boto3==1.43.98                   # AWS SDK; credentials via IAM role / `aws configure`, never .env
+# NOTE: langchain-aws 1.7 pulls langchain-core >= 1.6 (validated: `pip check` clean,
+# langgraph / langchain-ollama / langchain-google-genai / ragas all import).
 
 # --- Observability (Phase 10) ---
 langsmith==0.9.7                 # LangSmith tracing; auto-on when LANGSMITH_API_KEY is in .env

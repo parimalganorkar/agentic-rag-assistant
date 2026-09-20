@@ -16,6 +16,8 @@ server restart (a SqliteSaver + disk store would persist it).
 
 from __future__ import annotations
 
+import hmac
+import os
 import sys
 import time
 import uuid
@@ -25,13 +27,31 @@ from pathlib import Path
 # not the project root — so `import app.runtime` and the agent/retrieval imports
 # inside it fail with ModuleNotFoundError. Put the project root first so the app
 # runs with a plain `streamlit run`, no PYTHONPATH.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO_ROOT))
 
 import streamlit as st
+from dotenv import load_dotenv
+
+# Load (never read) .env before anything else so APP_PASSWORD and the limits
+# below are in place before the gate renders.
+load_dotenv(_REPO_ROOT / ".env")
 
 from app.runtime import AgentRuntime, TurnResult
 
 st.set_page_config(page_title="Docs Assistant", page_icon="📚", layout="centered")
+
+# --- Deployment safety knobs (all env-configurable) --------------------------
+# Shared passcode for the login gate. EMPTY = the app refuses to start rather
+# than silently running open: on a public box "forgot to set it" must not mean
+# "anyone can spend our LLM budget".
+APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+# Longest message we'll send to the LLM. A hard server-side cap, not just the
+# chat box's client-side max_chars (which a request can bypass).
+MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", "2000"))
+# Messages per browser session. Session-state only — no Redis, no accounts —
+# which is the level of protection a passcode-gated demo needs.
+MAX_MESSAGES_PER_SESSION = int(os.getenv("MAX_MESSAGES_PER_SESSION", "20"))
 
 USER_AVATAR = "🧑‍💻"
 AI_AVATAR = "📚"
@@ -93,6 +113,39 @@ def _inject_css() -> None:
     css = _load_css()
     if css:
         st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
+# --------------------------------------------------------------------------- #
+# Login gate + session limits                                                   #
+# --------------------------------------------------------------------------- #
+
+def _login_gate() -> None:
+    """Block the whole page behind a shared passcode. Nothing below main()'s
+    call to this renders until `st.session_state.authed` is True — including
+    the sidebar and the (expensive) runtime warm-up."""
+    if st.session_state.get("authed"):
+        return
+
+    st.title("LangChain Docs Assistant")
+    if not APP_PASSWORD:
+        st.error("APP_PASSWORD is not set. Add it to .env (see .env.example) and restart.")
+        st.stop()
+
+    with st.form("login", clear_on_submit=True):
+        pw = st.text_input("Passcode", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Enter")
+    if submitted:
+        # Constant-time compare — cheap insurance against timing leaks on a
+        # single shared secret.
+        if hmac.compare_digest(pw.encode("utf-8"), APP_PASSWORD.encode("utf-8")):
+            st.session_state.authed = True
+            st.rerun()
+        st.error("Wrong passcode.")
+    st.stop()
+
+
+def _messages_left() -> int:
+    return MAX_MESSAGES_PER_SESSION - st.session_state.get("messages_sent", 0)
 
 
 # --------------------------------------------------------------------------- #
@@ -235,8 +288,9 @@ def _sidebar() -> None:
                 trace_detail = "off · key present but not connected"
             else:
                 trace_detail = "off · no key in .env"
+            from agent.llm import provider_label
             rows = [
-                _status_row("LLM", True, "llama3.1:8b · local (Ollama)"),
+                _status_row("LLM", True, provider_label()),
                 _status_row("Retrieval", True, "hybrid + rerank · bge-small"),
                 _status_row("Corpus", docs is not None,
                             f"{docs} docs · pinned commit" if docs else "manifest not found"),
@@ -251,11 +305,14 @@ def _sidebar() -> None:
                        "• How fresh are your docs / what do you cover?\n\n"
                        "• Fetch the current LangGraph Studio guide")
         st.caption("Memory is per browser session (RAM-only); a server restart clears it.")
+        st.caption(f"Messages this session: {st.session_state.get('messages_sent', 0)} / "
+                   f"{MAX_MESSAGES_PER_SESSION}")
 
 
 def main() -> None:
-    _ensure_state()
     _inject_css()
+    _login_gate()            # st.stop()s here until the passcode is accepted
+    _ensure_state()
     _init_tracing()          # set LangSmith state BEFORE the sidebar reads it
     _sidebar()
 
@@ -270,9 +327,26 @@ def main() -> None:
         avatar = USER_AVATAR if role == "user" else AI_AVATAR
         _bubble(role, avatar, content, meta)
 
-    prompt = st.chat_input("Ask about LangChain or LangGraph…")
+    left = _messages_left()
+    if left <= 0:
+        st.warning(f"This session has reached its limit of {MAX_MESSAGES_PER_SESSION} messages. "
+                   "Start a new browser session to continue.")
+        st.chat_input("Session limit reached", disabled=True)
+        return
+
+    prompt = st.chat_input(f"Ask about LangChain or LangGraph… ({left} left this session)",
+                           max_chars=MAX_INPUT_CHARS)
     if not prompt:
         return
+    prompt = prompt.strip()
+    if not prompt:
+        return
+    # max_chars is enforced by the browser widget; re-check here because the
+    # server must not trust the client on anything that costs money.
+    if len(prompt) > MAX_INPUT_CHARS:
+        st.error(f"Message too long ({len(prompt)} chars). The limit is {MAX_INPUT_CHARS}.")
+        return
+    st.session_state.messages_sent = st.session_state.get("messages_sent", 0) + 1
 
     conv["history"].append(("user", prompt, None))
     if conv["title"] == "New chat":

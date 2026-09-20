@@ -1,6 +1,7 @@
 """Phase 8 — the router node: pick the path for a query.
 
-Pure-LLM routing (llama3.1:8b) into one of five paths, with argument extraction
+Pure-LLM routing (llama3.1:8b locally, Amazon Nova Pro on Bedrock when
+deployed — see agent/llm.py) into one of five paths, with argument extraction
 in the SAME call (which package? which topic? what to search live for?). A
 rule-based fallback catches the cases where the model returns unusable JSON, so
 the graph never stalls on a bad route. If the eval (Step 6) shows the LLM router
@@ -12,6 +13,15 @@ Routing paths:
   get_corpus_status   meta about OUR knowledge: freshness, pinned commit, coverage
   fetch_live_doc      current/new/out-of-scope doc CONTENT the frozen corpus lacks
   clarify             too vague to answer without a follow-up
+  out_of_scope        a clear question, but not about LangChain/LangGraph at all
+
+Why out_of_scope exists: the pipeline used to rely on retrieval confidence and
+the generator's "answer only from context" instruction to refuse off-domain
+questions. "Why is the sky blue?" defeated both, because the docs' own
+streaming example uses that exact prompt — the reranker found it, the generator
+completed it from world knowledge, and the judge saw the first sentence in the
+context. A semantic scope decision up front does not depend on retrieval luck,
+and it costs nothing: no retrieval, no live fetch, no generation.
 """
 
 from __future__ import annotations
@@ -20,10 +30,8 @@ import asyncio
 import json
 import re
 
-import ollama
-
+from agent import llm
 from agent.state import AgentState
-from rag.naive import LLM_MODEL, OLLAMA_HOST
 
 ALLOWED_ROUTES = (
     "retrieve",
@@ -31,6 +39,7 @@ ALLOWED_ROUTES = (
     "get_corpus_status",
     "fetch_live_doc",
     "clarify",
+    "out_of_scope",
 )
 
 ROUTER_SYSTEM = """You are the ROUTER for a LangChain/LangGraph documentation assistant.
@@ -38,7 +47,7 @@ Decide how to handle the user's message. Reply with ONE JSON object, nothing els
 
 Schema:
 {
-  "routes": ["<one or more of: retrieve, get_package_version, get_corpus_status, fetch_live_doc, clarify>"],
+  "routes": ["<one or more of: retrieve, get_package_version, get_corpus_status, fetch_live_doc, clarify, out_of_scope>"],
   "package": "<PyPI package name, or null>",
   "topic": "<short topic to check coverage for, or null>",
   "live_query": "<what to search the live docs for, or null>"
@@ -63,6 +72,16 @@ How to choose:
 - "clarify": the message is too vague to act on — NO specific LangChain/LangGraph subject to work with
   ("help", "it's broken", "can you help me fix this?", "what should I use?"). Even if phrased as a
   question, if there is no concrete topic, choose clarify.
+- "out_of_scope": the message HAS a clear subject, but that subject is not LangChain, LangGraph,
+  LangSmith, or building LLM/agent applications with them. General science, trivia, health, finance
+  ("why is the sky blue?", "how do I boil an egg?"); other software with no LangChain angle (CSS
+  layout, Kubernetes, Git, SQL syntax, NGINX, React state); other ML/AI stacks (training YOLO, fine-
+  tuning Stable Diffusion, PyTorch internals). This assistant only answers from the LangChain/
+  LangGraph docs, so these get an honest refusal instead of a made-up answer.
+  BE CONSERVATIVE: anything touching agents, tools, memory, checkpointers, streaming, RAG, prompts,
+  chat models, LLM providers, structured output, middleware, graphs/nodes/edges, or a LangChain/
+  LangGraph API name is IN scope — route it to retrieve, even if loosely worded. When unsure whether
+  a question is about LangChain, prefer retrieve; out_of_scope is for clear cases only.
 
 Key distinctions:
 - "Do you HAVE docs on X?"        -> get_corpus_status (meta: do we cover it)
@@ -70,6 +89,7 @@ Key distinctions:
 - "Show me / fetch the page on X" -> fetch_live_doc (live page CONTENT)
 - Version of a PACKAGE            -> get_package_version ; freshness of OUR DOCS -> get_corpus_status
 - Integration / provider pages    -> fetch_live_doc (they're outside our indexed scope)
+- No subject at all               -> clarify ; clear subject, wrong domain -> out_of_scope
 
 If the message has two DISTINCT intents (e.g. "what's the latest version AND how do I install it"),
 list both routes. Otherwise return exactly one.
@@ -82,27 +102,47 @@ User: "Do you have anything on middleware?"          -> {"routes":["get_corpus_s
 User: "Show me the current page on persistence"      -> {"routes":["fetch_live_doc"],"package":null,"topic":null,"live_query":"persistence"}
 User: "Get me the docs for the Pinecone integration" -> {"routes":["fetch_live_doc"],"package":null,"topic":null,"live_query":"Pinecone integration"}
 User: "Can you help me fix this?"                    -> {"routes":["clarify"],"package":null,"topic":null,"live_query":null}
+User: "Why is the sky blue?"                         -> {"routes":["out_of_scope"],"package":null,"topic":null,"live_query":null}
+User: "How do I center a div in CSS?"                -> {"routes":["out_of_scope"],"package":null,"topic":null,"live_query":null}
+User: "What is a checkpointer?"                      -> {"routes":["retrieve"],"package":null,"topic":null,"live_query":null}
 """
 
 
 def _run_router_llm(user_query: str, history: list[dict] | None = None) -> str:
-    client = ollama.Client(host=OLLAMA_HOST)
-    messages = [{"role": "system", "content": ROUTER_SYSTEM}]
-    messages.extend(history or [])  # prior turns so follow-ups route correctly
-    messages.append({"role": "user", "content": user_query})
-    resp = client.chat(
-        model=LLM_MODEL,
-        messages=messages,
-        format="json",  # force valid JSON out of the model
-        options={"num_predict": 200, "temperature": 0.0},
-    )
-    return (resp.get("message", {}).get("content") or "").strip()
+    """One router call on whichever provider `LLM_PROVIDER` names.
+
+    `json_mode` is Ollama's constrained decoding; Bedrock has no equivalent, so
+    there the prompt's "ONE JSON object, nothing else" instruction does the
+    work and `_parse_router_json` tolerates the fences/prose a hosted model
+    sometimes wraps around it. `history` = prior turns so follow-ups route
+    correctly."""
+    return llm.chat(ROUTER_SYSTEM, user_query, history, max_tokens=200, json_mode=True)
+
+
+def _extract_json_object(raw: str) -> dict | None:
+    """Find the JSON object in a model reply, tolerating ```json fences and
+    leading/trailing prose. Same recovery ladder as guardrails._parse_verdict."""
+    if not raw:
+        return None
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, re.S)
+        if not match:
+            return None
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+    return data if isinstance(data, dict) else None
 
 
 def _parse_router_json(raw: str) -> dict | None:
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
+    data = _extract_json_object(raw)
+    if data is None:
         return None
     routes = data.get("routes")
     if isinstance(routes, str):
@@ -177,4 +217,14 @@ def route_selector(state: AgentState) -> str:
         return "retrieve"
     if primary == "clarify":
         return "clarify"
+    if primary == "out_of_scope":
+        # A PRIOR, not a verdict: retrieve anyway and let the evidence decide
+        # (nodes.retrieval_gate). On the deployed generator the router called
+        # 4 of 91 legitimate questions out_of_scope — CopilotKit, the SQL-agent
+        # tutorial's music data, TTS in the voice agent — all with top rerank
+        # logits of 4–8, i.e. the docs plainly cover them. Refusing on the
+        # router's word alone was a 4.4% false-refusal rate; refusing only when
+        # retrieval agrees keeps every true off-topic refusal (all 9 adversarial
+        # questions score below 0.9) and drops those four.
+        return "retrieve"
     return "call_tool"  # any of the three MCP tools

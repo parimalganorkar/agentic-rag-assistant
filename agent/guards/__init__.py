@@ -119,7 +119,7 @@ class OutputVerdict:
     policy_violation: bool | None = None
     policy_reason: str = ""
     backend: str = ""
-    degraded: bool = False        # an LLM guard failed open this turn
+    degraded: bool = False        # every LLM judge was unavailable this turn (refused as unverifiable)
 
     @property
     def refused(self) -> bool:
@@ -153,9 +153,20 @@ def _strip_unsupported(answer: str, unsupported: Sequence[str]) -> tuple[str, in
     # unsupported prose line adjacent to code could never be stripped and the
     # whole answer got refused instead. Newlines separate them cleanly.
     candidates = [s for part in masked.split("\n") for s in _SENT_SPLIT_RE.split(part)]
-    to_remove: list[str] = []
+    # The verifier often returns ONE "claim" that quotes several consecutive
+    # sentences. Matching that whole span to a single best sentence removed one
+    # sentence, counted 1/N stripped, and shipped the rest as "repaired" — which
+    # is exactly how a four-sentence physics answer to "why is the sky blue"
+    # reached the user with "removed 1 unsupported claim". Split each claim into
+    # its own sentences and match each, so the strip fraction reflects what the
+    # judge actually rejected and the >40% rule can refuse.
+    pieces: list[str] = []
     for claim in unsupported:
-        c = re.sub(r"^the claim that\s+", "", (claim or "").strip(), flags=re.I).lower()
+        c = re.sub(r"^the claim that\s+", "", (claim or "").strip(), flags=re.I)
+        pieces.extend(p for p in _SENT_SPLIT_RE.split(c) if len(p.split()) >= 3)
+    to_remove: list[str] = []
+    for piece in pieces:
+        c = piece.strip().lower()
         if not c:
             continue
         best, best_score = None, 0.0
@@ -172,7 +183,7 @@ def _strip_unsupported(answer: str, unsupported: Sequence[str]) -> tuple[str, in
         # 0.55 was loose enough to match a merely SIMILAR sentence and delete
         # correct content. Repair must be conservative: if we are not confident
         # which sentence the verifier meant, refuse instead of silently editing.
-        if best is not None and best_score >= 0.62:
+        if best is not None and best_score >= 0.62 and best not in to_remove:
             to_remove.append(best)
 
     if not to_remove:
@@ -289,17 +300,17 @@ def check_output(
     v.backend = ground.backend
     v.degraded = bool(ground.error)
 
-    # FAIL-OPEN IS AN ATTACK SURFACE. verify_grounded returns grounded=True when
-    # the verifier errors, so anyone who can break it (exhaust the API key, kill
-    # ollama) silently disables the fact check. That trade is acceptable on a
-    # CLEAN turn — a dead network is not evidence an answer is wrong. It is NOT
-    # acceptable when the input stage already found injection text this turn:
-    # that combination is precisely the one an attacker engineers.
-    if ground.error and injection_seen:
+    # FAIL CLOSED. verify_grounded now returns grounded=False with `error` set
+    # when every judge in its chain (Gemini -> Nova Lite) is down or unparseable.
+    # An unverifiable answer is refused outright rather than routed into the
+    # repair path, which would strip nothing (no unsupported claims were named)
+    # and then refuse with the misleading reason "not supported by sources".
+    # This used to fail open on clean turns; on a public deployment that makes
+    # "exhaust the verifier's quota" a bypass for the whole fact check.
+    if ground.error:
         v.action = "refuse"
-        v.refuse_reason = (
-            f"cannot verify this answer ({ground.error}) and the retrieved "
-            "sources contained injection text"
+        v.refuse_reason = f"cannot verify this answer ({ground.error})" + (
+            " and the retrieved sources contained injection text" if injection_seen else ""
         )
         return v
 
@@ -322,6 +333,8 @@ def check_output(
     policy = _g.check_output_policy(question, v.answer, None, True)
     v.policy_violation = policy.violation
     v.policy_reason = policy.reason
+    if policy.error:
+        v.degraded = True  # judges were down; the refusal below is an outage, not a verdict
     if policy.violation:
         v.safety_flags += list(policy.artifacts or [])
         v.action = "refuse"

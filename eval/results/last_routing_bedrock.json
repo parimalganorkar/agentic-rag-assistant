@@ -1,8 +1,8 @@
 {
   "n": 28,
-  "mean_jaccard": 0.875,
-  "exact_match_rate": 0.857,
-  "exact_matches": 24,
+  "mean_jaccard": 0.964,
+  "exact_match_rate": 0.964,
+  "exact_matches": 27,
   "fallback_uses": 0,
   "rows": [
     {
@@ -77,7 +77,7 @@
         "retrieve"
       ],
       "predicted": [
-        "get_corpus_status"
+        "fetch_live_doc"
       ],
       "jaccard": 0.0,
       "exact": false,
@@ -103,11 +103,10 @@
         "get_package_version"
       ],
       "predicted": [
-        "get_corpus_status",
         "get_package_version"
       ],
-      "jaccard": 0.5,
-      "exact": false,
+      "jaccard": 1.0,
+      "exact": true,
       "fallback": false
     },
     {
@@ -329,10 +328,10 @@
         "out_of_scope"
       ],
       "predicted": [
-        "retrieve"
+        "out_of_scope"
       ],
-      "jaccard": 0.0,
-      "exact": false,
+      "jaccard": 1.0,
+      "exact": true,
       "fallback": false
     },
     {
@@ -342,10 +341,10 @@
         "out_of_scope"
       ],
       "predicted": [
-        "retrieve"
+        "out_of_scope"
       ],
-      "jaccard": 0.0,
-      "exact": false,
+      "jaccard": 1.0,
+      "exact": true,
       "fallback": false
     },
     {

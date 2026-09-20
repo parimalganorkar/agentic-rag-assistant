@@ -14,16 +14,13 @@ import asyncio
 import json
 import re
 
-import ollama
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agent import guardrails, guards
+from agent import guardrails, guards, llm
 from agent.mcp_client import parse_tool_result
 from agent.state import AgentState
 from rag.naive import (
-    LLM_MODEL,
     MAX_OUTPUT_TOKENS,
-    OLLAMA_HOST,
     SYSTEM_PROMPT,
     _format_context,
     build_prompt,
@@ -31,14 +28,29 @@ from rag.naive import (
 from retrieval.pipeline import retrieve as hybrid_retrieve
 
 RETRIEVE_K = 5
-# Cross-encoder rerank scores are logits, not [0,1]. Calibrated on this corpus:
-# in-scope top hits score ~+4 to +7, clearly out-of-scope score ~-8 to -11. A
-# negative top score means retrieval found nothing genuinely relevant, so we
-# escalate to a live GitHub fetch rather than answer from junk context.
-RETRIEVAL_CONFIDENCE_MIN = 0.0
+# Cross-encoder rerank scores are logits, not [0,1]. Measured on the 100-question
+# eval set (2026-09-20, top-1 logit after hybrid+rerank):
+#   legit questions (91):   min 0.62  p10 4.06  median 6.26  max 9.31
+#   adversarial (9):        min -9.57 median -3.39           max 0.82
+# The gate used to sit at 0.0, and "why is sky blue" scored +1.15 because the
+# docs' own streaming example uses that exact prompt — one coincidental hit
+# above a sea of -9s, and the generator answered a physics question from it.
+# 2.0 sits in the empty band between the adversarial max and the legit p10:
+# it catches 9/9 adversarial plus that case, and escalates only the 2 vaguest
+# legit questions (0.62, 0.94) to a live fetch rather than refusing them.
+RETRIEVAL_CONFIDENCE_MIN = 2.0
 
 NO_CONTEXT_ANSWER = (
     "I don't have enough information in the retrieved docs to answer that."
+)
+# Router-level refusal for questions that are not about LangChain/LangGraph at
+# all. Ends with the NO_CONTEXT_ANSWER phrase on purpose: both eval harnesses
+# recognise a refusal by "enough information in the retrieved docs", so this
+# stays countable without touching eval code.
+OUT_OF_SCOPE_ANSWER = (
+    "That's outside what I cover. I answer questions about LangChain and LangGraph "
+    "from their documentation, so I don't have enough information in the retrieved "
+    "docs to answer that."
 )
 
 _PKG_RE = re.compile(r"\b(langchain[-\w]*|langgraph[-\w]*|langsmith)\b", re.I)
@@ -129,16 +141,9 @@ def history_messages(messages: list | None, limit: int = HISTORY_TURNS) -> list[
 
 
 def _run_llm(system: str, user: str, history: list[dict] | None = None) -> str:
-    client = ollama.Client(host=OLLAMA_HOST)
-    messages = [{"role": "system", "content": system}]
-    messages.extend(history or [])
-    messages.append({"role": "user", "content": user})
-    resp = client.chat(
-        model=LLM_MODEL,
-        messages=messages,
-        options={"num_predict": MAX_OUTPUT_TOKENS, "temperature": 0.0},
-    )
-    return (resp.get("message", {}).get("content") or "").strip()
+    """One generation on whichever provider `LLM_PROVIDER` names (agent/llm.py).
+    Used by generate_node and clarify_node."""
+    return llm.chat(system, user, history, max_tokens=MAX_OUTPUT_TOKENS)
 
 
 async def guard_input_node(state: AgentState) -> dict:
@@ -164,6 +169,12 @@ async def guard_input_node(state: AgentState) -> dict:
         out["source_conflicts"] = verdict.source_conflicts
     if verdict.pii_found:
         out["pii_redacted"] = verdict.pii_found
+    # The router's out_of_scope call is a prior. If retrieval is confident the
+    # docs cover this, the evidence wins: convert to a normal retrieve turn and
+    # record that the router was overruled (telemetry / trace).
+    if (state.get("route") or [""])[0] == "out_of_scope" and confidence >= RETRIEVAL_CONFIDENCE_MIN:
+        out["route"] = ["retrieve"]
+        out["scope_overruled"] = True
     return out
 
 
@@ -204,10 +215,18 @@ async def sanitize_tool_node(state: AgentState) -> dict:
 
 
 def retrieval_gate(state: AgentState) -> str:
-    """After retrieval, decide whether the hits are good enough to answer from
-    or whether to escalate to a live GitHub fetch."""
+    """After retrieval, decide whether the hits are good enough to answer from.
+
+    Weak retrieval means two different things depending on what the router
+    thought: for an in-domain question it means the frozen corpus lacks the
+    topic -> escalate to a live GitHub fetch; for a question the router already
+    called out_of_scope it is confirmation -> refuse, without paying for a live
+    fetch that cannot help. (A confident out_of_scope turn never reaches this
+    branch: guard_input_node already converted it to a retrieve turn.)"""
     if (state.get("retrieval_confidence") or 0.0) >= RETRIEVAL_CONFIDENCE_MIN:
         return "generate"
+    if (state.get("route") or [""])[0] == "out_of_scope":
+        return "out_of_scope"
     return "escalate"
 
 
@@ -250,6 +269,23 @@ def make_call_tool_node(tools: dict):
         return {"tool_name": primary, "tool_result": parse_tool_result(raw)}
 
     return call_tool_node
+
+
+async def out_of_scope_node(state: AgentState) -> dict:
+    """The router called the question off-domain AND retrieval agreed (top rerank
+    logit below RETRIEVAL_CONFIDENCE_MIN). Nothing is fetched or generated — the
+    reply is a fixed string, so it does not go through guard_output (that stage
+    exists for LLM text). Guard fields are set explicitly so the UI shows an
+    honest "refused" badge and finalize never caches it.
+    """
+    return {
+        "answer": OUT_OF_SCOPE_ANSWER,
+        "guard_action": "refuse",
+        "guard_reason": "question is outside the LangChain/LangGraph documentation",
+        "guard_repairs": [],
+        "grounded": True,          # nothing was claimed, so nothing is ungrounded
+        "guard_degraded": False,
+    }
 
 
 CLARIFY_SYSTEM = """The user's message is too vague to answer. Reply with ONE short, friendly
@@ -359,8 +395,8 @@ async def finalize_node(state: AgentState) -> dict:
     refusal that replaced it.
 
     Also stores the answer in the full-answer cache, but ONLY when it is clean:
-    a normal answer that passed the output guards, was not degraded (verifier
-    failed open), is not a refusal, and is not a clarify turn. Caching a refusal
+    a normal answer that passed the output guards, was not degraded (every
+    judge unavailable), is not a refusal, and is not a clarify turn. Caching a refusal
     or a degraded verdict would pin a transient failure and replay it for every
     later ask of the same question.
     """

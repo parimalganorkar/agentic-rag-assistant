@@ -14,12 +14,12 @@ Enterprise Support Knowledge Assistant: an agentic RAG system over LangChain/Lan
 - ChromaDB (local, no cloud account) as the vector store
 - `BAAI/bge-small-en-v1.5` for embeddings (384-dim, local, free — swapped from all-MiniLM-L6-v2 because its 256-token hard limit silently truncates code-block-heavy chunks; bge-small's 512-token window fits a code example + explanation together)
 - `rank-bm25` for sparse retrieval, `cross-encoder/ms-marco-MiniLM-L-6-v2` for reranking
-- **LLM: `llama3.1:8b` served locally by [Ollama](https://ollama.com)** — swapped from Gemini after hitting the free-tier 20-RPM cap during Phase 6 RAGAS eval. Local means no rate limits, no 503s, no API key, and it fully honors the "free-tier, locally runnable" project ethos. Runs on ~5 GB VRAM (RTX 4050-class card). Same model serves as RAG generator AND RAGAS judge.
+- **LLM (generator): Amazon Nova Pro on AWS Bedrock** (`LLM_PROVIDER=bedrock`, `agent/llm.py`) — chosen 2026-09-20 after a measured comparison against local `llama3.1:8b` on the same code: routing 27/28 vs 24/28, all 4 out-of-scope probes vs 2, ~5 s vs ~20 s per answer, no GPU. `llama3.1:8b` via [Ollama](https://ollama.com) is retained as the offline/no-account mode and is the baseline the system was built and first evaluated on (it replaced Gemini-as-generator in Phase 6 after the free-tier RPM cap). The RAGAS judge and the guardrail verifier are Gemini, deliberately a different model family from the generator. No Claude/Anthropic models are used anywhere.
 - MCP Python SDK for the tool server
-- RAGAS for evaluation, plus a custom routing/tool-correctness metric (Jaccard-based) to score whether the agent chose the right path (retrieve / get_package_version / get_corpus_status / fetch_live_doc / clarify — see `eval/routing_testset.json`)
+- RAGAS for evaluation, plus a custom routing/tool-correctness metric (Jaccard-based) to score whether the agent chose the right path (retrieve / get_package_version / get_corpus_status / fetch_live_doc / clarify / out_of_scope — see `eval/routing_testset.json`; `out_of_scope` added 2026-09-20 after "why is the sky blue?" was answered from the docs' own streaming example; it is a PRIOR — retrieval still runs and a top rerank logit ≥ `RETRIEVAL_CONFIDENCE_MIN` (2.0) overrules it, because refusing on the router's word alone cost 4/91 legitimate questions on the deployed generator)
 - LangSmith for tracing and observability (native LangChain/LangGraph integration, free tier)
 - LangGraph's built-in `MemorySaver` checkpointer for multi-turn conversation memory
-- FastAPI backend; frontend TBD (React or Streamlit for v1)
+- Streamlit frontend (`app/streamlit_app.py`) over an async warm-session bridge (`app/runtime.py`); no separate API layer
 - `python-frontmatter` for stripping and extracting YAML frontmatter from MDX/MD files
 
 ## Key Decisions — don't relitigate these without discussion

@@ -8,8 +8,12 @@ dense + sparse pipeline, calls live tools when the frozen corpus can't answer,
 and puts every generated answer through a two-stage guard layer that **repairs
 what it can and refuses what it must**.
 
-Runs entirely **locally and free**: `llama3.1:8b` via Ollama, local embeddings,
-local vector store. No paid API is required to run it.
+The generator is **Amazon Nova Pro on AWS Bedrock**, chosen after a measured
+comparison against the local `llama3.1:8b` it was developed on (see
+[Generator comparison](#generator-comparison-llama-vs-nova-pro)). Retrieval,
+embeddings, reranking and the vector store are all local. A fully **offline
+mode** (`LLM_PROVIDER=ollama`) is retained: it needs no cloud account and is
+how the system was built and first evaluated.
 
 ---
 
@@ -76,11 +80,11 @@ because a cross-encoder logit isn't one. The badge row (`route: retrieve` ·
 
 | Capability | How |
 |---|---|
-| **Agentic routing** | An LLM router picks one of 5 paths: retrieve · package version · corpus status · live doc fetch · clarify |
+| **Agentic routing** | An LLM router picks one of 6 paths: retrieve · package version · corpus status · live doc fetch · clarify · **out of scope**. The last is a *prior*, not a verdict: retrieval still runs, and confident retrieval overrules it; only when both agree is the question refused — with no generation and no judge |
 | **Hybrid retrieval** | dense (bge-small + Chroma) + BM25 → Reciprocal Rank Fusion → cross-encoder rerank |
 | **Real MCP tools** | A FastMCP server exposing 3 tools that return **real** data (live PyPI, our own manifest, live GitHub docs) — no mock data |
 | **Knows its own limits** | The corpus is pinned to a commit, so "what's the latest version?" routes to PyPI, and out-of-scope topics escalate to a live fetch |
-| **Two-stage guardrails** | Input: PII scrub, prompt-injection scan, source corroboration. Output: deterministic → embedding → LLM checks |
+| **Two-stage guardrails** | Input: PII scrub, prompt-injection scan, source corroboration. Output: deterministic → embedding → LLM checks. The LLM judge (Gemini, with a Nova Lite fallback) is a **different model family from the generator** and the chain **fails closed** if both are unavailable |
 | **Measured, not asserted** | Every number below comes from a committed eval harness, including 3 **held-out** attack suites |
 | **Observability + caching** | LangSmith tracing (auto region detection) and three in-process caches |
 
@@ -88,7 +92,29 @@ because a cross-encoder logit isn't one. The badge row (`route: retrieve` ·
 
 ## Results
 
-All measured against the shipped system with the committed harnesses in `eval/`.
+All measured with the committed harnesses in `eval/`. Retrieval and RAGAS
+numbers were measured on the local `llama3.1:8b` generator during development;
+the generator comparison and the final refusal numbers are on the deployed
+Nova Pro configuration — each table says which.
+
+### Generator comparison: llama vs Nova Pro
+
+The system was built and first evaluated on local llama; Nova Pro was then run
+through the same harnesses on the same code. Where the two are directly
+comparable, Nova Pro is better, and it is what's deployed.
+
+| measure | llama3.1:8b (local) | Amazon Nova Pro (Bedrock) | comparable? |
+|---|---|---|---|
+| Routing accuracy — Jaccard, 28 cases | 0.875 (24/28) | **0.964 (27/28)** | yes — same set, same code, same day |
+| Out-of-scope probes routed correctly (r23–r26) | 2/4 | **4/4** | yes |
+| Full-graph false refusals, 91 legit questions | 0.099 *(Phase 9 system, before the 2026-09-20 fixes)* | **0.022** *(current system)* | no — different system versions; shown as history |
+| Off-topic questions refused, 9 adversarial | 9/9 | **9/9** | yes |
+| Cold answer latency | ~17–26 s | **~5–7 s** | yes |
+| Cost per answer | GPU electricity | fractions of a cent | — |
+
+What was *not* re-measured on Nova: the RAGAS answer-quality and retrieval
+tables below. Retrieval is generator-independent; RAGAS is not, and re-running
+it on Nova is listed under future work rather than assumed.
 
 ### Retrieval — `python -m eval.run_eval` (91 questions)
 
@@ -121,9 +147,17 @@ All measured against the shipped system with the committed harnesses in `eval/`.
 | | before guards | after |
 |---|---|---|
 | Attack success (when the poisoned chunk was retrieved) | 0.333 | **0.040** |
-| False refusals on 91 legitimate questions | 0.440 | **0.099** |
-| Routing accuracy (Jaccard, 22 cases) | — | **0.932** |
+| False refusals on 91 legitimate questions (llama3.1:8b, Phase 9) | 0.440 | **0.099** |
+| False refusals on 91 legitimate questions (Nova Pro, full graph, after the out-of-scope + repair + regex fixes, 2026-09-20) | 0.055 | **0.022** |
+| Off-topic questions refused (9 adversarial, same run) | — | **9/9**, at the router |
+| Routing accuracy (Jaccard, 28 cases incl. 4 out-of-scope + 2 boundary) | — | **0.875** llama3.1:8b · **0.964** Nova Pro |
 
+> The two 2026-09-20 rows are two full-graph runs on the deployed generator: the
+> 0.055 run exposed the router refusing 4 legitimate questions on its own word
+> (see problem 5 below); the 0.022 run is after the fix. The 2 remaining
+> refusals are judge variance — one of them flipped between the two runs with
+> no code change — not a rule that can be tuned away.
+>
 > Suites **B** and **C** are held out — written *after* the guards, with disjoint
 > attacks, markers and probes. Suite A alone scored 0.0, which turned out to
 > measure the guards against the very strings they were built from. The held-out
@@ -153,11 +187,13 @@ flowchart TD
         ROUTER -->|docs question| RET["hybrid retrieval<br/>dense + BM25 → RRF → rerank"]
         ROUTER -->|"latest version?"| T1["get_package_version<br/>live PyPI"]
         ROUTER -->|"how fresh are your docs?"| T2["get_corpus_status<br/>our manifest"]
-        ROUTER -->|out of scope| T3["fetch_live_doc<br/>live GitHub"]
+        ROUTER -->|new / uncovered topic| T3["fetch_live_doc<br/>live GitHub"]
         ROUTER -->|too vague| CLR["clarify"]
+        ROUTER -->|"not about LangChain at all (a prior)"| RET
 
         RET --> GIN["GUARD IN<br/>injection scan · corroboration"]
-        GIN -->|weak retrieval| T3
+        GIN -->|"logit < 2.0, in-domain"| T3
+        GIN -->|"logit < 2.0, router said off-domain"| OOS["out of scope<br/>fixed refusal, ~1.5s"]
         GIN --> GEN["generate<br/>llama3.1:8b"]
         T1 --> GEN
         T2 --> GEN
@@ -166,6 +202,7 @@ flowchart TD
         GEN --> GOUT["GUARD OUT<br/>deterministic → embedding → LLM"]
         GOUT -->|pass / repaired| ANS(["answer + sources"])
         GOUT -->|unsafe| REF(["honest refusal"])
+        OOS --> REF
     end
 
     EMB -.->|retrieval| RET
@@ -180,8 +217,10 @@ session for its lifetime.
 
 ### Prerequisites
 - Python 3.11+
-- [Ollama](https://ollama.com) running locally: `ollama pull llama3.1:8b`
-- ~6 GB VRAM (or CPU, slower)
+- **Either** AWS credentials with Bedrock access to Nova Pro / Nova Lite
+  (`aws configure`, or an IAM role on EC2) — the deployed configuration —
+- **or**, for offline mode, [Ollama](https://ollama.com) with `ollama pull llama3.1:8b`
+  and ~6 GB VRAM (or CPU, slower)
 
 ### 1. Install
 ```bash
@@ -204,7 +243,8 @@ cd data/raw && git checkout 22cbff9d7ad4b676db836360d98adc343f523ee1 && cd ../..
 ```bash
 cp .env.example .env      # then fill in what you need
 ```
-Everything except the LLM is optional — see `.env.example`.
+For a local run only `APP_PASSWORD` is required (the web UI refuses to start
+without one). Everything else is optional — see `.env.example`.
 
 ### 4. Build the index
 ```bash
@@ -217,12 +257,73 @@ Everything except the LLM is optional — see `.env.example`.
 
 ### 5. Run it
 ```bash
-# Web UI (recommended)
+# Web UI (recommended) — opens a passcode gate first; enter APP_PASSWORD from .env
 ./env/Scripts/python.exe -m streamlit run app/streamlit_app.py
 
-# or terminal chat
+# or terminal chat (no gate — local use only)
 ./env/Scripts/python.exe -m agent.cli
 ```
+
+### Choosing the LLM provider
+
+The router, generator and clarify step all go through one factory
+(`agent/llm.py`), selected by `LLM_PROVIDER` in `.env`:
+
+| `LLM_PROVIDER` | Generator | Needs | When |
+|---|---|---|---|
+| `bedrock` | **Amazon Nova Pro** on AWS Bedrock (`apac.amazon.nova-pro-v1:0`) | AWS credentials via IAM role (EC2) or `aws configure`; `AWS_REGION` | **The chosen generator** — better routing, faster, no GPU needed; what the hosted demo runs |
+| `ollama` | `llama3.1:8b`, local | Ollama running, ~6 GB VRAM | Offline development with no cloud account; the baseline the system was built and first evaluated on. Also the code's fallback when `LLM_PROVIDER` is unset |
+
+```bash
+# .env
+LLM_PROVIDER=bedrock
+AWS_REGION=ap-south-1
+```
+
+No AWS access keys go in `.env` — Bedrock auth is boto3's normal credential
+chain. Model ids are region-specific: in `ap-south-1` Nova models only invoke
+through the `apac.` inference profile. If Bedrock returns a
+`ValidationException` in your region, override `BEDROCK_MODEL_ID` /
+`BEDROCK_GUARD_MODEL_ID`. Smoke-test the switch, including the router's JSON
+contract, with:
+
+```bash
+./env/Scripts/python.exe -m agent.llm bedrock
+```
+
+> **Why Nova Pro.** It was not a hosting convenience — it was measured. On the
+> same routing set and the same code, Nova Pro routes 27/28 against llama's
+> 24/28 and catches all four off-topic probes against llama's two; it answers
+> in ~5–7 s instead of ~20 s; and it needs no GPU, which is what makes a public
+> deployment possible at all. The full comparison is in
+> [Results](#generator-comparison-llama-vs-nova-pro). The Ollama path is
+> kept because a free, offline, no-account mode is worth having — and because
+> it is the baseline every later measurement is compared against.
+
+The guardrail judges do **not** use `LLM_PROVIDER` on purpose. A guard must be
+a different model family from the generator, or it ends up grading its own
+work — so the primary judge is always Gemini. Amazon Nova Lite on Bedrock is
+the fallback for when Gemini is down; it shares the Nova Pro generator's
+family, a known and accepted weakening on the fallback path only. If both
+judges are unavailable the turn is **refused as unverifiable** rather than
+shipped unchecked.
+`GUARDRAIL_VERIFIER=ollama` remains as an explicit opt-in for fully-offline
+development.
+
+### Login gate and limits
+
+The web UI is behind a single shared passcode and two cheap abuse limits, all
+from `.env`:
+
+| Variable | Default | What it does |
+|---|---|---|
+| `APP_PASSWORD` | *(required)* | Passcode for the login page. Empty = the app refuses to start. |
+| `MAX_MESSAGES_PER_SESSION` | `20` | Messages per browser session; the input is disabled with a clear notice when hit. |
+| `MAX_INPUT_CHARS` | `2000` | Longest accepted message, enforced server-side before anything reaches the LLM. |
+
+These are session-state limits — no accounts, no Redis — which is the right
+size for a passcode-gated demo, not a substitute for real auth on a
+multi-tenant product.
 
 ---
 
@@ -245,6 +346,7 @@ Everything except the LLM is optional — see `.env.example`.
 
 ```
 agent/        LangGraph agent — graph, nodes, router, guards, cache, tracing
+  llm.py      provider factory: LLM_PROVIDER=ollama | bedrock
   guards/     two-stage guardrails (check_input / check_output)
 retrieval/    dense · sparse · RRF fusion · cross-encoder rerank
 ingestion/    cleaner (MDX → Markdown) · chunker · embedder
@@ -261,7 +363,8 @@ docs/         roadmap and phase-by-phase build notes
 
 **LangGraph** (orchestration) · **LangChain** (retrieval utils) · **ChromaDB** ·
 **bge-small-en-v1.5** (embeddings) · **rank-bm25** ·
-**ms-marco-MiniLM-L-6-v2** (reranker) · **llama3.1:8b** via Ollama ·
+**ms-marco-MiniLM-L-6-v2** (reranker) · **Amazon Nova Pro** on AWS Bedrock
+(generator; `llama3.1:8b` via Ollama as the offline baseline) · **Gemini** (guard judge, Nova Lite fallback) ·
 **MCP Python SDK** · **RAGAS** · **LangSmith** · **Streamlit**
 
 ---
@@ -324,6 +427,40 @@ prompt-injection attacks written *after* the defences existed.
 
 **The result.** Attack success fell from **33% → 4%**, and the 2 attacks that
 still get through are documented openly rather than hidden.
+
+### 5. "Why is the sky blue?" got a confident, cited answer
+
+**The problem.** The system was designed to refuse questions its docs don't
+cover, and the eval set said it did (9/9 adversarial questions refused). Then a
+plain physics question got a four-sentence answer about Rayleigh scattering,
+cited to `[S1]`. The LangChain docs' *streaming example* uses the prompt "Why
+is the sky blue?" and shows the streamed output `"The sky is typically
+blue..."` — so the reranker scored that chunk +1.15 (above the 0.0 confidence
+gate, with the other four hits at −9 to −11), the generator completed the
+sentence from world knowledge, and the fact-checker saw the opening words in the
+context and passed it. Three defences, one coincidence, all defeated at once.
+
+**The fix — and the fix to the fix.** The confidence gate moved from 0.0 to
+**2.0**, chosen from the measured distribution rather than by feel: legit
+questions have a top logit of 4.06 at the 10th percentile, adversarial ones max
+out at 0.82, so 2.0 sits in the empty band. The router gained an explicit
+**`out_of_scope`** path. The first version of that path refused on the router's
+word alone — and a full-graph run showed it refusing **4 of 91 legitimate
+questions** (CopilotKit, the SQL tutorial's music data, TTS in the voice agent:
+questions whose surface subject looks foreign but which the docs cover, all at
+rerank logits of 4–8). So `out_of_scope` became a *prior*: retrieval still
+runs, confident retrieval overrules the router, and the refusal fires only when
+both agree. Two more defects surfaced by the same measurement were fixed
+alongside: the repair step matched a multi-sentence "unsupported" claim to one
+sentence and shipped the rest (this is how the sky answer survived the judge),
+and the secret-disclosure regex flagged "a State **key**" and the docs' own
+`getpass("Enter API key…")` as phishing — 3 more false refusals.
+
+**The result.** Off-topic questions refuse in ~1.5s with no generation; all
+four wrongly-refused questions answer again; the screenshot answer is now
+stopped at three independent layers. Measured against the *judge prompt*, a
+tightened variant changed zero legitimate outcomes and caught nothing extra, so
+the prompt was left alone — the failure was never there.
 
 ---
 

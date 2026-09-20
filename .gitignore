@@ -52,3 +52,12 @@ Thumbs.db
 
 # Claude Code local (personal) settings — machine-specific, not shared.
 .claude/settings.local.json
+
+# Personal working documents — for my own use, never published.
+docs/PROJECT_REPORT.md
+Project_Report.docx
+
+# Deployment runbook + server configs — local only, never published.
+deploy/
+# Office lock files (e.g. ~$oject_Report.docx)
+~$*
