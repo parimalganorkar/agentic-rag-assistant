@@ -85,7 +85,7 @@ because a cross-encoder logit isn't one. The badge row (`route: retrieve` ·
 | **Real MCP tools** | A FastMCP server exposing 3 tools that return **real** data (live PyPI, our own manifest, live GitHub docs) — no mock data |
 | **Knows its own limits** | The corpus is pinned to a commit, so "what's the latest version?" routes to PyPI, and out-of-scope topics escalate to a live fetch |
 | **Two-stage guardrails** | Input: PII scrub, prompt-injection scan, source corroboration. Output: deterministic → embedding → LLM checks. The LLM judge (Gemini, with a Nova Lite fallback) is a **different model family from the generator** and the chain **fails closed** if both are unavailable |
-| **Measured, not asserted** | Every number below comes from a committed eval harness, including 3 **held-out** attack suites |
+| **Measured, not asserted** | Every number below comes from a committed eval harness, including 3 disjoint attack suites — 2 of them **held out**, written after the guards existed |
 | **Observability + caching** | LangSmith tracing (auto region detection) and three in-process caches |
 
 ---
@@ -150,6 +150,10 @@ it on Nova is listed under future work rather than assumed.
 | False refusals on 91 legitimate questions (llama3.1:8b, Phase 9) | 0.440 | **0.099** |
 | False refusals on 91 legitimate questions (Nova Pro, full graph, after the out-of-scope + repair + regex fixes, 2026-09-20) | 0.055 | **0.022** |
 | Off-topic questions refused (9 adversarial, same run) | — | **9/9**, at the router |
+
+> **False refusals over the life of the project:** 0.440 when the guards were first
+> measured → 0.099 at the end of Phase 9 (local llama) → **0.022** on the deployed
+> system today (Nova Pro, full graph, all guards). Same 91 legitimate questions each time.
 | Routing accuracy (Jaccard, 28 cases incl. 4 out-of-scope + 2 boundary) | — | **0.875** llama3.1:8b · **0.964** Nova Pro |
 
 > The two 2026-09-20 rows are two full-graph runs on the deployed generator: the
@@ -359,6 +363,31 @@ docs/         roadmap and phase-by-phase build notes
 
 ---
 
+## Deployment
+
+The public demo runs on **AWS EC2 in ap-south-1** (Mumbai) with **Amazon Bedrock**
+as the LLM backend. The box has no GPU; the switch from local Ollama to Bedrock is
+one environment variable (`LLM_PROVIDER`), with no code changes, because every
+LLM call goes through the provider factory in `agent/llm.py`.
+
+**Security posture — what is deliberately *not* on the server:**
+
+| Concern | How it's handled |
+|---|---|
+| AWS credentials | **None stored anywhere.** The instance has an IAM role; boto3 resolves credentials from it at runtime. Local development uses a separate IAM user scoped to Bedrock invoke only |
+| IAM permissions | Least privilege: `bedrock:InvokeModel` / `InvokeModelWithResponseStream` on the two Nova inference profiles and their foundation-model ARNs, nothing else |
+| Network | Security group allows 80/443 only; SSH restricted to a single IP (or disabled in favour of Session Manager); Streamlit's port 8501 bound to localhost behind nginx with TLS |
+| Application access | Single shared passcode (`APP_PASSWORD` — the app refuses to start without one), constant-time compared |
+| Abuse / spend | Per-session message cap and input-length cap enforced server-side (see [Login gate and limits](#login-gate-and-limits)); AWS Budget alerts on Bedrock and EC2 spend; the instance is stopped when not being demoed |
+| Secrets in git | `.env` gitignored; `.env.example` ships placeholders only; the deployment runbook is kept out of the repository |
+| Release artifacts | The ChromaDB index, `chunks.jsonl` and cleaned corpus are shipped as build artifacts (byte-identical to what was evaluated), not rebuilt on the box |
+
+The same two guards that protect answer quality also bound cost: an unverifiable
+answer is refused rather than retried, and an off-topic question is refused at the
+router before any generation happens.
+
+---
+
 ## Tech stack
 
 **LangGraph** (orchestration) · **LangChain** (retrieval utils) · **ChromaDB** ·
@@ -413,8 +442,9 @@ were 95% correct and properly cited were being binned over one stray line.
 and keep the rest. Refuse outright only when too much has to be cut, or when the
 content is genuinely unsafe.
 
-**The result.** False refusals dropped from **44% → 9.9%**, with no loss in
-attack resistance.
+**The result.** False refusals dropped from **44% → 9.9%** at the time, with no loss
+in attack resistance — and to **2.2%** on the deployed system after the fixes in
+problem 5 below.
 
 ### 4. "It ignores irrelevant docs" — proven, not claimed
 
