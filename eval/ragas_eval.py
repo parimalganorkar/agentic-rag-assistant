@@ -37,8 +37,9 @@ Embed:    bge-small (local) for the embedding-based ResponseRelevancy metric.
 
 Outputs
 -------
-  eval/results/last_ragas.json         # per-question + aggregate scores
-  eval/results/rag_answers.jsonl       # cache of generated answers per pipeline
+  eval/results/last_ragas.json                 # most recent run (headline)
+  eval/results/last_ragas_<provider>.json      # permanent copy per generator
+  eval/results/rag_answers_<provider>.jsonl    # cache of generated answers per pipeline
 
 Usage
 -----
@@ -58,10 +59,10 @@ from typing import Callable
 
 import os
 
-import ollama
 from dotenv import load_dotenv
 
-from rag.naive import build_prompt, SYSTEM_PROMPT, LLM_MODEL, OLLAMA_HOST
+from agent import llm as provider_llm
+from rag.naive import build_prompt, SYSTEM_PROMPT
 from retrieval.dense import RetrievedChunk, dense_search
 from retrieval.pipeline import retrieve as hybrid_rerank_retrieve
 
@@ -71,12 +72,19 @@ from retrieval.pipeline import retrieve as hybrid_rerank_retrieve
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TESTSET_PATH = REPO_ROOT / "eval" / "testset.json"
 RESULTS_DIR = REPO_ROOT / "eval" / "results"
-ANSWERS_CACHE = RESULTS_DIR / "rag_answers.jsonl"
-RESULTS_PATH = RESULTS_DIR / "last_ragas.json"
-
 load_dotenv(REPO_ROOT / ".env")
 
-# Answerer = LLM_MODEL (llama3.1:8b, local) — the pipeline under test.
+# Answerer = whatever LLM_PROVIDER names (agent/llm.py): the pipeline under test.
+# The cache and the provider-tagged results file carry the provider name so a
+# Nova run and a llama run can coexist (rag_answers_bedrock.jsonl vs
+# rag_answers_ollama.jsonl). last_ragas.json is always the most recent run —
+# the headline — and last_ragas_<provider>.json is its permanent copy.
+PROVIDER = provider_llm.provider()
+GENERATOR_LABEL = provider_llm.provider_label()
+ANSWERS_CACHE = RESULTS_DIR / f"rag_answers_{PROVIDER}.jsonl"
+RESULTS_PATH = RESULTS_DIR / "last_ragas.json"
+RESULTS_PATH_TAGGED = RESULTS_DIR / f"last_ragas_{PROVIDER}.json"
+
 # Judge    = JUDGE_MODEL (gemini, cloud)    — different model → no self-bias,
 #            and reliable JSON (the local llama judge produced NaN parse errors).
 # gemini-2.5-flash 404s on newer API keys ("no longer available to new users").
@@ -128,21 +136,14 @@ def _append_cache(row: RagRow) -> None:
 
 
 def _generate_answer(question: str, hits: list[RetrievedChunk]) -> str:
-    """Retrieve → stuff → call Ollama. Same logic as rag/naive.answer(),
-    but takes pre-fetched hits so we don't re-run retrieval."""
+    """Retrieve → stuff → generate on the configured provider. Same prompt and
+    temperature as rag/naive.answer() and the agent's generate node, but takes
+    pre-fetched hits so we don't re-run retrieval. Going through agent.llm keeps
+    all three pipelines on the SAME generator, so the cross-pipeline comparison
+    (dense vs hybrid vs guarded agent) is not confounded by the model."""
     if not hits:
         return "I don't have enough information in the retrieved docs to answer that."
-    client = ollama.Client(host=OLLAMA_HOST)
-    user_prompt = build_prompt(question, hits)
-    response = client.chat(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_prompt},
-        ],
-        options={"num_predict": 1024, "temperature": 0.0},
-    )
-    return (response.get("message", {}).get("content") or "").strip()
+    return provider_llm.chat(SYSTEM_PROMPT, build_prompt(question, hits), max_tokens=1024)
 
 
 def build_ragas_rows(
@@ -437,7 +438,8 @@ def _write_results_json(reports: list[RagasReport],
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "metric_family": "ragas (reference-free)",
-        "answer_generator": LLM_MODEL,        # llama3.1:8b (local) — pipeline under test
+        "answer_generator": GENERATOR_LABEL,  # the configured provider — pipeline under test
+        "provider": PROVIDER,
         "judge_llm": JUDGE_MODEL,             # gemini (cloud) — scores the answers
         "judge_backend": "google-gemini",
         "judge_embeddings": "BAAI/bge-small-en-v1.5",
@@ -464,7 +466,9 @@ def _write_results_json(reports: list[RagasReport],
         ],
         "guard_impact": guard_report,
     }
-    RESULTS_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    RESULTS_PATH.write_text(text, encoding="utf-8")
+    RESULTS_PATH_TAGGED.write_text(text, encoding="utf-8")
     return RESULTS_PATH
 
 
@@ -494,7 +498,7 @@ def run(regenerate: bool = False, generate_only: bool = False,
         pipelines = pipelines + [(AGENT_PIPELINE_NAME, None)]
         guard_report = _print_guard_report(agent_rows)
 
-    # Stage 1 (local llama generation) is done and cached to rag_answers.jsonl.
+    # Stage 1 (generation on the configured provider) is done and cached to rag_answers_<provider>.jsonl.
     # With --generate-only we stop here — no Gemini key needed. A later plain
     # run loads these from cache and jumps straight to judging.
     if generate_only:

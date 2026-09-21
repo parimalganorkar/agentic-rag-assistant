@@ -109,12 +109,15 @@ comparable, Nova Pro is better, and it is what's deployed.
 | Out-of-scope probes routed correctly (r23–r26) | 2/4 | **4/4** | yes |
 | Full-graph false refusals, 91 legit questions | 0.099 *(Phase 9 system, before the 2026-09-20 fixes)* | **0.022** *(current system)* | no — different system versions; shown as history |
 | Off-topic questions refused, 9 adversarial | 9/9 | **9/9** | yes |
+| RAGAS faithfulness — dense / hybrid pipelines (no guards) | 0.835 / 0.809 | **0.942 / 0.937** | yes — same questions, judge and retrieval; only the generator differs |
+| RAGAS response relevancy — dense / hybrid | 0.929 / 0.956 | **0.943 / 0.984** | yes |
+| RAGAS faithfulness — guarded agent | 0.719 | **0.941** | partly — generator *and* the 2026-09-20 guard fixes both changed |
 | Cold answer latency | ~17–26 s | **~5–7 s** | yes |
 | Cost per answer | GPU electricity | fractions of a cent | — |
 
-What was *not* re-measured on Nova: the RAGAS answer-quality and retrieval
-tables below. Retrieval is generator-independent; RAGAS is not, and re-running
-it on Nova is listed under future work rather than assumed.
+The dense and hybrid rows are the cleanest read: no guards in the path, so the
++0.10 faithfulness is the generator alone. Retrieval metrics are
+generator-independent and were not re-run.
 
 ### Retrieval — `python -m eval.run_eval` (91 questions)
 
@@ -131,16 +134,35 @@ it on Nova is listed under future work rather than assumed.
 
 ### Answer quality — `python -m eval.ragas_eval` (RAGAS, LLM-judged)
 
+Deployed generator, **Amazon Nova Pro** (2026-09-21, `eval/results/last_ragas.json`),
+Gemini flash-lite as judge — a different model from the answerer so it can't grade itself:
+
 | metric | dense | hybrid + rerank | **agent (guarded)** |
 |---|---|---|---|
-| Faithfulness | 0.835 | 0.809 | **0.719** |
-| ResponseRelevancy | 0.929 | 0.956 | **0.851** |
-| ContextPrecision | 0.647 | 0.682 | **0.663** |
+| Faithfulness | 0.942 | 0.937 | **0.941** † |
+| ResponseRelevancy | 0.943 | 0.984 | **0.962** |
+| ContextPrecision | 0.691 | 0.780 | **0.751** |
+| False refusals (91 legit) | — | — | **1 (0.011)** |
 
-> The guarded agent scores *lower* on faithfulness by design: a refusal is
-> "unfaithful to context" by construction, so the ~10% of questions it safely
-> declines drag the mean down. Reported honestly that's **~0.79 on answered
-> questions at a 0.099 refusal rate.**
+† averaged over 90 of 91 questions — one judge call failed to parse and RAGAS
+excludes it rather than scoring it zero.
+
+The guarded agent now sits within 0.005 of the unguarded pipelines on
+faithfulness: with refusals down to 1 in 91, the "refusal counts as unfaithful"
+penalty that dominated the earlier run has almost nothing left to penalise.
+
+Development baseline, local `llama3.1:8b`, Phase 9 system (`eval/results/last_ragas_ollama.json`):
+
+| metric | dense | hybrid + rerank | agent (guarded) |
+|---|---|---|---|
+| Faithfulness | 0.835 | 0.809 | 0.719 |
+| ResponseRelevancy | 0.929 | 0.956 | 0.851 |
+| ContextPrecision | 0.647 | 0.682 | 0.663 |
+
+> On llama the guarded agent scored *lower* on faithfulness by design: a refusal
+> is "unfaithful to context" by construction, so the ~10% of questions it safely
+> declined dragged the mean down — ~0.79 on answered questions at a 0.099
+> refusal rate. That gap is what closed above.
 
 ### Safety — `python -m eval.eval_injections` (3 disjoint suites, 105 attacks)
 
@@ -152,8 +174,10 @@ it on Nova is listed under future work rather than assumed.
 | Off-topic questions refused (9 adversarial, same run) | — | **9/9**, at the router |
 
 > **False refusals over the life of the project:** 0.440 when the guards were first
-> measured → 0.099 at the end of Phase 9 (local llama) → **0.022** on the deployed
-> system today (Nova Pro, full graph, all guards). Same 91 legitimate questions each time.
+> measured → 0.099 at the end of Phase 9 (local llama) → **0.011–0.022** on the
+> deployed system (Nova Pro, full graph, all guards; 1 and 2 refusals across two
+> post-fix runs — the difference is judge variance on one question). Same 91
+> legitimate questions each time.
 | Routing accuracy (Jaccard, 28 cases incl. 4 out-of-scope + 2 boundary) | — | **0.875** llama3.1:8b · **0.964** Nova Pro |
 
 > The two 2026-09-20 rows are two full-graph runs on the deployed generator: the
@@ -376,10 +400,12 @@ LLM call goes through the provider factory in `agent/llm.py`.
 |---|---|
 | AWS credentials | **None stored anywhere.** The instance has an IAM role; boto3 resolves credentials from it at runtime. Local development uses a separate IAM user scoped to Bedrock invoke only |
 | IAM permissions | Least privilege: `bedrock:InvokeModel` / `InvokeModelWithResponseStream` on the two Nova inference profiles and their foundation-model ARNs, nothing else |
-| Network | Security group allows 80/443 only; SSH restricted to a single IP (or disabled in favour of Session Manager); Streamlit's port 8501 bound to localhost behind nginx with TLS |
+| Network | Security group restricts both SSH (22, key-pair auth) and the app port (8501) to the operator's IP — the demo is **not yet public**. Before the link is shared: bind Streamlit to localhost behind nginx with Let's Encrypt TLS and open only 80/443 (the passcode travels in the clear over plain HTTP) |
 | Application access | Single shared passcode (`APP_PASSWORD` — the app refuses to start without one), constant-time compared |
 | Abuse / spend | Per-session message cap and input-length cap enforced server-side (see [Login gate and limits](#login-gate-and-limits)); AWS Budget alerts on Bedrock and EC2 spend; the instance is stopped when not being demoed |
 | Secrets in git | `.env` gitignored; `.env.example` ships placeholders only; the deployment runbook is kept out of the repository |
+
+**What is verified where:** the passcode gate, session caps, input cap, fail-closed guards and the no-keys-in-code rule are enforced in this repository and covered by the checks in `eval/`. The IAM scoping, security-group rules and budget alerts are AWS-console configuration and are described here as configured on 2026-09-21; they are not something the code can prove.
 | Release artifacts | The ChromaDB index, `chunks.jsonl` and cleaned corpus are shipped as build artifacts (byte-identical to what was evaluated), not rebuilt on the box |
 
 The same two guards that protect answer quality also bound cost: an unverifiable
